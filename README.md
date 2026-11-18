@@ -26,7 +26,6 @@ Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spa
    ```text
    https://github.com/ChasingImagines/EventBoaard.git
    ```
-
 ---
 
 ## 🚀 Sıfırdan Adım Adım Kurulum ve Kullanım Rehberi
