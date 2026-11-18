@@ -26,6 +26,14 @@ namespace Yasin.EventBoard
         {
             key.Publish(VoidSignal.Default);
         }
+
+        /// <summary>
+        /// Fires this parameterless VoidSignal channel.
+        /// </summary>
+        public static void Raise(this EventKey<VoidSignal> key)
+        {
+            key.Publish(VoidSignal.Default);
+        }
     }
 }
 

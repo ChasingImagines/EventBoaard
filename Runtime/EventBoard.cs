@@ -403,5 +403,108 @@ namespace Yasin.EventBoard
                 return path;
             return fallback;
         }
+        [Serializable]
+        public sealed class BlackboardSnapshot
+        {
+            public List<Entry> entries = new List<Entry>();
+
+            [Serializable]
+            public sealed class Entry
+            {
+                public string guid;
+                public string path;
+                public string json;
+            }
+        }
+
+        /// <summary>
+        /// Exports only channels marked as IsSaveable to a clean JSON snapshot string.
+        /// Useful for integrating with any save/load or persistence system.
+        /// </summary>
+        public static string ExportStateJson()
+        {
+            EnsureInitialized();
+            BlackboardSnapshot snapshot = new BlackboardSnapshot();
+
+            foreach (var kvp in _diagnosticSlots)
+            {
+                IEventChannelDiagnostic slot = kvp.Value;
+                if (slot == null || !slot.IsSaveable)
+                    continue;
+
+                string valJson = slot.ExportValueJson();
+                if (valJson == null)
+                    continue;
+
+                snapshot.entries.Add(new BlackboardSnapshot.Entry
+                {
+                    guid = slot.Guid,
+                    path = slot.Path,
+                    json = valJson
+                });
+            }
+
+            return JsonUtility.ToJson(snapshot, prettyPrint: true);
+        }
+
+        /// <summary>
+        /// Restores state from an ExportStateJson snapshot.
+        /// Missing or corrupt channels automatically fall back to ScriptableObject DefaultValues without errors.
+        /// </summary>
+        /// <param name="json">BlackboardSnapshot JSON string.</param>
+        /// <param name="notifyListeners">Whether to trigger callbacks for restored values.</param>
+        public static bool ImportStateJson(string json, bool notifyListeners = false)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return false;
+
+            EnsureInitialized();
+            try
+            {
+                BlackboardSnapshot snapshot = JsonUtility.FromJson<BlackboardSnapshot>(json);
+                if (snapshot == null || snapshot.entries == null)
+                    return false;
+
+                Dictionary<string, string> byGuid = new Dictionary<string, string>(StringComparer.Ordinal);
+                Dictionary<string, string> byPath = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                for (int i = 0; i < snapshot.entries.Count; i++)
+                {
+                    var e = snapshot.entries[i];
+                    if (!string.IsNullOrEmpty(e.guid))
+                        byGuid[e.guid] = e.json;
+                    if (!string.IsNullOrEmpty(e.path))
+                        byPath[e.path] = e.json;
+                }
+
+                foreach (var kvp in _diagnosticSlots)
+                {
+                    IEventChannelDiagnostic slot = kvp.Value;
+                    if (slot == null || !slot.IsSaveable)
+                        continue;
+
+                    string entryJson = null;
+                    if (!string.IsNullOrEmpty(slot.Guid) && byGuid.TryGetValue(slot.Guid, out string gj))
+                    {
+                        entryJson = gj;
+                    }
+                    else if (!string.IsNullOrEmpty(slot.Path) && byPath.TryGetValue(slot.Path, out string pj))
+                    {
+                        entryJson = pj;
+                    }
+
+                    if (entryJson != null)
+                    {
+                        slot.TryImportValueJson(entryJson, notifyListeners);
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[EventBoard] ImportStateJson failed: {ex.Message}. Falling back to default values.");
+                return false;
+            }
+        }
     }
 }

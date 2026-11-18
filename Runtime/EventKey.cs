@@ -93,6 +93,12 @@ namespace Yasin.EventBoard
         /// <summary>
         /// Değeri Blackboard'a yazar ve bu kanalı dinleyen tüm abonelere sıfır çöp (Zero-GC) ile yayınlar.
         /// </summary>
+        /// <summary>
+        /// Fires this event channel and notifies all active subscribers with the payload.
+        /// Alias for Publish.
+        /// </summary>
+        public void Raise(T payload) => Publish(payload);
+
         public void Publish(T payload)
         {
             EventChannelSlot<T> slot = ResolveSlot();
