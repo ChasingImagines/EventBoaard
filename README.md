@@ -141,6 +141,50 @@ onGameStarted.Subscribe(() => Debug.Log("Oyun Başladı!"));
 
 ---
 
+---
+
+## 🧩 Kendi Özel Veri Tiplerinizi Tanımlama (Custom Types)
+
+EventBoard; `int`, `float`, `string`, `bool`, `Vector2`, `Vector3`, `Color`, `GameObject`, `Transform` gibi tipleri dahili olarak destekler. Ancak projenize özel `struct` veya `class` veri tiplerini (örn: `QuestData`, `InventoryItem`, `DamageInfo`) eklemek de son derece kolaydır:
+
+### 1. Veri Tipinizi Oluşturun:
+```csharp
+using System;
+
+[Serializable]
+public struct QuestData
+{
+    public string questId;
+    public int targetCount;
+    public bool isCompleted;
+}
+```
+
+### 2. EventBoard İçin Payload Tanımını Ekleyin:
+```csharp
+using System;
+using Yasin.EventBoard;
+
+[Serializable]
+public sealed class QuestDataPayload : EventPayloadDefinition<QuestData>
+{
+    public override string DisplayName => "QuestData";
+}
+```
+
+> **Nasıl Çalışır?** Paketin hiçbir koduna dokunmanıza gerek yoktur. Unity Editörü (`TypeCache`) bu sınıfı otomatik keşfeder ve Inspector'daki tip seçici açılır listesinde `QuestData` anında görünür!
+> 
+> Kodunuzda doğrudan `EventKey<QuestData>` olarak tip güvenliğiyle kullanabilirsiniz:
+> ```csharp
+> [SerializeField] private EventKey<QuestData> questKey;
+> 
+> void UpdateQuest()
+> {
+>     questKey.Raise(new QuestData { questId = "q1", targetCount = 3 });
+>     QuestData current = questKey.Value;
+> }
+> ```
+
 ## 💾 İsteğe Bağlı Save / Load (JSON Snapshot)
 
 Eğer projenizde Blackboard verilerini diske kaydetmek isterseniz:
