@@ -6,8 +6,15 @@
   "unity": "2021.3",
   "author": {
     "name": "Yasin Öztürk",
-    "email": ""
+    "email": "chasingimagines@gmail.com",
+    "url": "https://github.com/ChasingImagines"
   },
+  "contributors": [
+    {
+      "name": "Antigravity (Google DeepMind)",
+      "url": "https://deepmind.google"
+    }
+  ],
   "keywords": [
     "event",
     "eventboard",

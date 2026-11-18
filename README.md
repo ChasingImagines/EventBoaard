@@ -175,5 +175,12 @@ Inspect all active channels, live Blackboard state values, subscriber counts, an
 
 ---
 
+
+---
+
+## 👥 Credits & Acknowledgments
+- **Author:** [Yasin Öztürk](https://github.com/ChasingImagines)
+- **AI Pair-Programmer:** Antigravity (Google DeepMind)
+
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE.md) - created by Yasin Öztürk.

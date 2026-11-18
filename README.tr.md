@@ -92,5 +92,12 @@ public class HealthUI : MonoBehaviour
 
 ---
 
+
+---
+
+## 👥 Emeği Geçenler (Credits)
+- **Geliştirici:** [Yasin Öztürk](https://github.com/ChasingImagines)
+- **AI Pair-Programmer:** Antigravity (Google DeepMind)
+
 ## 📄 Lisans
 Bu proje **MIT Lisansı** altında lisanslanmıştır. Yasin Öztürk tarafından geliştirilmiştir.
