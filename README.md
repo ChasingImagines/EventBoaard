@@ -1,105 +1,93 @@
 # EventBoard & Blackboard for Unity
 
-**EventBoard**, Unity projeleri için ScriptableObject tabanlı, decoupled (tamamen bağımsız), tip güvenli (strongly-typed) ve Inspector dostu bir **Event Bus (Olay Haberleşmesi) + Global Blackboard (Merkezi Veri Deposu)** mimarisidir.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Unity 2021.3+](https://img.shields.io/badge/Unity-2021.3+-blue.svg)](https://unity.com/)
+[![Language](https://img.shields.io/badge/Language-English%20%7C%20Turkish-informational)](#-documentation-languages)
+
+[🇹🇷 Türkçe Dokümantasyon için tıklayın (README.tr.md)](README.tr.md)
+
+**EventBoard** is a high-performance, decoupled, strongly-typed, and Inspector-friendly **Event Bus + Global Blackboard (Shared State Store)** architecture for Unity built on ScriptableObjects.
 
 ---
 
-## ❓ Bu Araç Ne İşe Yarar? Neden Kullanmalıyım?
+## 💡 Why EventBoard?
 
-Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spagetti Kod):
-- UI scripti Oyuncuya referans verir, Oyuncu Görev Yöneticisine referans verir, Düşman UI'a bağlanmaya çalışır...
-- Bir scripti sildiğinizde veya sahneyi değiştirdiğinizde her yer `MissingReferenceException` ve `NullReferenceException` hatalarıyla dolar.
+In complex game projects, systems easily become tightly coupled (Spaghetti Code):
+- UI scripts reference the Player, Player references the Quest Manager, Enemies reference UI...
+- When an object is destroyed or a scene unloads, `NullReferenceException` and `MissingReferenceException` occur.
 
-**EventBoard bunu tamamen çözer:**
-1. **Sıfır Referans Bağı (Decoupled):** Oyuncu, UI veya Düşman birbirini tanımak zorunda kalmaz. Herkes ortadaki ortak panoya (EventBoard) bakar.
-2. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızasında tutar. Yeni doğan bir karakter veya geç açılan bir UI menüsü, panodaki son değeri anında okur.
-3. **Tertemiz Yaşam Döngüsü (Fresh State):** Çalışma anındaki tüm değişkenler C# statik belleğinde tutulur; ScriptableObject dosyasına yazılmaz. Oyun durduğunda veriler uçar, oyun yeniden açıldığında her şey tertemiz (SO varsayılanlarıyla) başlar.
-4. **İsteğe Bağlı Save/Load Entegrasyonu (`Export/Import`):** Sadece `Saveable (Kaydedilebilir)` işaretlediğiniz veriler tek satırla JSON snapshot olarak dışarı aktarılır ve geri yüklenir. Eksik/hatalı verilerde sistem asla çökmez, SO varsayılanlarını korur.
-5. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki ve Prefab'lardaki seçimleriniz asla bozulmaz.
-6. **Sıfır GC (Garbage Collection):** Oyun içinde bellek çöpü üretmez, drop/takılma yapmaz.
+**EventBoard provides clean decoupling:**
+- **Zero-Coupling:** Systems never hold direct references to one another; both sides interact through shared ScriptableObject channels.
+- **Event Bus + Blackboard Combined:** Unlike typical event systems that fire and forget, EventBoard retains the latest value in memory. Late-spawned entities or newly opened UI menus immediately retrieve the current state without querying other managers.
+- **Fresh Runtime State:** Dynamic data lives in C# static memory—never dirtying ScriptableObject asset files on disk. When Play Mode exits, memory resets cleanly.
+- **Zero Allocation (Zero-GC):** Generic delegate dispatching with runtime integer hashing avoids garbage collection spikes.
+- **Unbreakable GUID Safety:** Channel references in scenes and prefabs remain valid even if you rename events or reorganize groups.
+- **Optional Snapshot (Save/Load):** Export only marked `Saveable` data to JSON with single-line calls, with automatic fallback to defaults for corrupt or missing keys.
 
 ---
 
-## 📦 Kurulum (Unity Package Manager)
+## 📦 Installation (Unity Package Manager)
 
-1. Unity'de üst menüden **Window > Package Manager** penceresini açın.
-2. Sol üstteki **`+`** butonuna tıklayın ve **"Add package from git URL..."** seçeneğini seçin.
-3. Aşağıdaki Git URL'sini yapıştırıp **Add** butonuna basın:
+1. Open **Window > Package Manager** in Unity.
+2. Click the **`+`** icon in the top-left corner and select **"Add package from git URL..."**.
+3. Paste the following Git URL:
    ```text
    https://github.com/ChasingImagines/EventBoard.git
    ```
 
 ---
 
-## 🚀 Sıfırdan Adım Adım Kurulum ve Kullanım Rehberi
+## 🚀 Quick Start Guide
 
-### Adım 1: Event/Blackboard Grubu Oluşturma (Tamamen Otomatik)
-
-Elle klasör oluşturmanıza **gerek yoktur**, sistem klasörleri arka planda kendisi açar:
-
-- **1. Kolay Yol (Tek Tıkla - Önerilen):**
-  - Üst menüden **Tools > EventBoard > Hub** penceresini açın.
-  - Grubunuza bir ad yazıp (örn: `PlayerEvents`) **"+ Oluştur"** butonuna basın.
-  - Sistem gerekli tüm klasörleri (`Assets/Resources/EventBoard/`) otomatik açar ve grubunuzu içine oluşturur!
-
-- **2. Klasik Yol (Project Penceresinden):**
-  - Project penceresinde istediğiniz yerde sağ tıklayın:
-    > **Create > EventBoard > Event Group (SO)**
-  - Gruba bir isim verin (Örn: `PlayerEvents`, `CombatEvents`, `UIEvents`).
+### 1. Create an Event/Blackboard Group
+- Open **Tools > EventBoard > Hub** from the top menu.
+- Enter a group name (e.g., `PlayerEvents`) and click **"+ Create"**.
+- The necessary folder structure (`Assets/Resources/EventBoard/`) and asset are generated automatically.
+- In the Inspector, click **"Add Event"** to define typed channels (e.g., `Health`, `Score`).
 
 ---
 
-### Adım 2: Grup İçine Neler Tanımlayabilirim?
+### 2. Reading & Writing State (Blackboard)
 
-Oluşturduğunuz `.asset` dosyasına tıklayın. Inspector penceresinde **"Add Event"** butonuna basarak içine kanallar ekleyin:
-
-| Kanal Ayarı | Ne İşe Yarar? | Örnek |
-| :--- | :--- | :--- |
-| **Event Name** | Kanalın adı | `PlayerHealth`, `Score` |
-| **Payload Definition** | Kanalın taşıyacağı veri tipi | `Integer`, `Float`, `Boolean`, `String` veya `Void (Parametresiz)` |
-| **Default Value** | Oyun başındaki varsayılan Blackboard değeri | Sağlık için `100`, Para için `0` |
-| **💾 Saveable** | İsteğe bağlı Save/Load çıktısına (JSON) dahil edilsin mi? | Skor için işaretleyin; anlık zıplama sinyali için boş bırakın |
-| **Description** | Geliştirici açıklama notu | "Oyuncunun anlık can değeri." |
-
----
-
-### Adım 3: C# Kodunda Nasıl Kullanılır?
-
-Kod yazarken sınıfınızın en üstüne namespace'i ekleyin:
-```csharp
-using Yasin.EventBoard;
-```
-
-#### Senaryo A: Blackboard Olarak Kullanım (Veri Okuma ve Yazma)
 ```csharp
 using UnityEngine;
 using Yasin.EventBoard;
 
 public class PlayerController : MonoBehaviour
 {
+    // Searchable dropdown in the Inspector
     [SerializeField] private EventKey<int> healthKey;
 
     private void Start()
     {
-        // 1. Panodaki mevcut değeri doğrudan oku (Sıfır GC):
+        // 1. Direct Zero-GC read:
         int currentHealth = healthKey.Value;
 
-        // 2. Panodaki değeri sessizce güncelle (Event fırlatmadan):
+        // 2. Safe read:
+        if (healthKey.TryGet(out int val))
+        {
+            Debug.Log($"Current health: {val}");
+        }
+
+        // 3. Silent state update (no event notification):
         healthKey.SetState(80, notify: false);
 
-        // 3. Değer değiştiyse güncelle ve tüm dinleyicileri uyar:
+        // 4. Update and notify only if the value changed:
         healthKey.SetStateIfChanged(50, notify: true);
     }
 
     public void TakeDamage(int damage)
     {
-        // Değeri doğrudan yeni haliyle tetikle:
+        // Raise event with new value:
         healthKey.Raise(healthKey.Value - damage);
     }
 }
 ```
 
-#### Senaryo B: Event Dinleme (UI Scriptleri)
+---
+
+### 3. Listening to Events (Event Bus)
+
 ```csharp
 using UnityEngine;
 using UnityEngine.UI;
@@ -112,7 +100,7 @@ public class HealthUI : MonoBehaviour
 
     private void OnEnable()
     {
-        // replayLatest: true sayesinde UI açıldığı an panodaki en güncel can değerini anında alır!
+        // replayLatest: true triggers callback immediately with current Blackboard value upon subscribe!
         healthKey.Subscribe(UpdateHealthBar, replayLatest: true);
     }
 
@@ -121,49 +109,40 @@ public class HealthUI : MonoBehaviour
         healthKey.Unsubscribe(UpdateHealthBar);
     }
 
-    private void UpdateHealthBar(int newHealth)
-    {
-        healthSlider.value = newHealth;
-    }
+    private void UpdateHealthBar(int newHealth) => healthSlider.value = newHealth;
 }
 ```
 
-#### Senaryo C: Verisiz Sinyaller (VoidSignal)
+---
+
+### 4. Parameterless Signals (VoidSignal)
+
 ```csharp
 [SerializeField] private EventKey<VoidSignal> onGameStarted;
 
-// Tetikleme:
+// Fire:
 onGameStarted.Raise();
 
-// Dinleme:
-onGameStarted.Subscribe(() => Debug.Log("Oyun Başladı!"));
+// Listen:
+onGameStarted.Subscribe(() => Debug.Log("Game Started!"));
 ```
 
 ---
 
----
+## 🧩 Custom Data Types (Extensibility)
 
-## 🧩 Kendi Özel Veri Tiplerinizi Tanımlama (Custom Types)
+EventBoard supports primitives (`int`, `float`, `string`, `bool`, `Vector2`, `Vector3`, `Color`, `GameObject`, `Transform`) out of the box. You can easily register custom `struct` or `class` types:
 
-EventBoard; `int`, `float`, `string`, `bool`, `Vector2`, `Vector3`, `Color`, `GameObject`, `Transform` gibi tipleri dahili olarak destekler. Ancak projenize özel `struct` veya `class` veri tiplerini (örn: `QuestData`, `InventoryItem`, `DamageInfo`) eklemek de son derece kolaydır:
-
-### 1. Veri Tipinizi Oluşturun:
 ```csharp
 using System;
+using Yasin.EventBoard;
 
 [Serializable]
 public struct QuestData
 {
     public string questId;
     public int targetCount;
-    public bool isCompleted;
 }
-```
-
-### 2. EventBoard İçin Payload Tanımını Ekleyin:
-```csharp
-using System;
-using Yasin.EventBoard;
 
 [Serializable]
 public sealed class QuestDataPayload : EventPayloadDefinition<QuestData>
@@ -171,42 +150,30 @@ public sealed class QuestDataPayload : EventPayloadDefinition<QuestData>
     public override string DisplayName => "QuestData";
 }
 ```
+*Unity Editor's `TypeCache` automatically detects this definition; `QuestData` will appear instantly in the Inspector dropdown.*
 
-> **Nasıl Çalışır?** Paketin hiçbir koduna dokunmanıza gerek yoktur. Unity Editörü (`TypeCache`) bu sınıfı otomatik keşfeder ve Inspector'daki tip seçici açılır listesinde `QuestData` anında görünür!
-> 
-> Kodunuzda doğrudan `EventKey<QuestData>` olarak tip güvenliğiyle kullanabilirsiniz:
-> ```csharp
-> [SerializeField] private EventKey<QuestData> questKey;
-> 
-> void UpdateQuest()
-> {
->     questKey.Raise(new QuestData { questId = "q1", targetCount = 3 });
->     QuestData current = questKey.Value;
-> }
-> ```
+---
 
-## 💾 İsteğe Bağlı Save / Load (JSON Snapshot)
-
-Eğer projenizde Blackboard verilerini diske kaydetmek isterseniz:
-Sistem dosya yönetimiyle uğraşmaz; sadece JSON çıktısı verir ve alır:
+## 💾 Optional Save / Load (JSON Snapshot)
 
 ```csharp
-// 1. Sadece [Saveable] işaretli kanalların anlık değerlerini JSON olarak alır:
+// 1. Export channels marked as [Saveable] to JSON:
 string json = EventBoard.ExportStateJson();
-// Bu string'i kendi Save Sisteminize (PlayerPrefs, Dosya, Bulut vb.) verin.
 
-// 2. Kaydedilen veriyi geri yükler (Hatalı/eksik alanlarda DefaultValue korunur):
+// 2. Restore state (missing/invalid fields safely fallback to ScriptableObject defaults):
 EventBoard.ImportStateJson(json, notifyListeners: true);
 ```
 
 ---
 
-## 🔍 Görsel Kontrol Merkezi (EventBoard Hub)
+## 🔍 Visual Inspector & Diagnostics
 
-Tüm projede hangi eventler var, hafızadaki değerleri ne ve o kanalı kaç kişi dinliyor görmek için:
+Open the visual dashboard via:
 > **Tools > EventBoard > Hub**
+
+Inspect all active channels, live Blackboard state values, subscriber counts, and test-fire events directly from the editor during Play Mode.
 
 ---
 
-## 📄 Lisans
-Bu proje **MIT Lisansı** altında lisanslanmıştır. Yasin Öztürk tarafından geliştirilmiştir. İstediğiniz ticari ve açık kaynak projelerde özgürce kullanabilirsiniz.
+## 📄 License
+This project is licensed under the [MIT License](LICENSE.md) - created by Yasin Öztürk.
