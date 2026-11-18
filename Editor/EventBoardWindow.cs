@@ -173,7 +173,7 @@ namespace Yasin.EventBoard.Editor
                 {
                     if (GUILayout.Button("Temizle", EditorStyles.miniButton, GUILayout.Width(75f)))
                     {
-                        EventBoard.ExportStateJson();
+                        EventBoard.ResetAll();
                     }
                 }
             }
