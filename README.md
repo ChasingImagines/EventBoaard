@@ -26,7 +26,7 @@ Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spa
 2. Sol üstteki **`+`** butonuna tıklayın ve **"Add package from git URL..."** seçeneğini seçin.
 3. Aşağıdaki Git URL'sini yapıştırıp **Add** butonuna basın:
    ```text
-   https://github.com/ChasingImagines/EventBoaard.git
+   https://github.com/ChasingImagines/EventBoard.git
    ```
 
 ---
