@@ -18,42 +18,32 @@ Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spa
 
 ---
 
-## 📦 Kurulum
+## 📦 Kurulum (Unity Package Manager)
 
-### Yöntem 1: Git URL ile (Önerilen)
 1. Unity'de üst menüden **Window > Package Manager** penceresini açın.
-2. Sol üst köşedeki **`+`** simgesine tıklayın ve **"Add package from git URL..."** seçeneğini seçin.
-3. Depo adresini girin:
+2. Sol üstteki **`+`** butonuna tıklayın ve **"Add package from git URL..."** seçeneğini seçin.
+3. Aşağıdaki Git URL'sini yapıştırıp **Add** butonuna basın:
    ```text
-   https://github.com/<kullanici_adi>/<repo_adi>.git
+   https://github.com/ChasingImagines/EventBoaard.git
    ```
-
-### Yöntem 2: Yerel Klasörden (Disk)
-1. Package Manager penceresinde **`+` > "Add package from disk..."** seçin.
-2. Bu paketin bulunduğu klasördeki `package.json` dosyasını seçin.
 
 ---
 
 ## 🚀 Sıfırdan Adım Adım Kurulum ve Kullanım Rehberi
 
-### Adım 1: Klasör Yapısını Hazırlama
-Unity projenizin `Assets` klasörü altında şu yolu oluşturun:
-> `Assets/Resources/EventBoard/`
+### Adım 1: Event/Blackboard Grubu Oluşturma (Tamamen Otomatik)
 
-*(Not: Sistemin oyun başlarken gruplarınızı otomatik olarak hafızaya alabilmesi için `Resources/EventBoard` altında bulunması şarttır.)*
+Elle klasör oluşturmanıza **gerek yoktur**, sistem klasörleri arka planda kendisi açar:
 
----
+- **1. Kolay Yol (Tek Tıkla - Önerilen):**
+  - Üst menüden **Tools > EventBoard > Hub** penceresini açın.
+  - Grubunuza bir ad yazıp (örn: `PlayerEvents`) **"+ Oluştur"** butonuna basın.
+  - Sistem gerekli tüm klasörleri (`Assets/Resources/EventBoard/`) otomatik açar ve grubunuzu içine oluşturur!
 
-### Adım 2: Hangi Dosyayı Nereden Oluşturacağım?
-
-Belirli bir konudaki eventleri ve verileri toplamak için bir **Grup Dosyası** oluşturun:
-1. `Assets/Resources/EventBoard/` klasörüne sağ tıklayın.
-2. Açılan menüden:
-   > **Create > EventBoard > Event Group (SO)**
-3. Dosyaya konseptinize uygun bir isim verin. Örneğin:
-   - `PlayerEvents.asset` (Can, enerji, ölme sinyalleri için)
-   - `UIEvents.asset` (Pencere açılma, buton tıklamaları için)
-   - `GameEvents.asset` (Oyun başladı, duraklatıldı sinyalleri için)
+- **2. Klasik Yol (Project Penceresinden):**
+  - Project penceresinde istediğiniz yerde sağ tıklayın:
+    > **Create > EventBoard > Event Group (SO)**
+  - Gruba bir isim verin (Örn: `PlayerEvents`, `CombatEvents`, `UIEvents`).
 
 ---
 
