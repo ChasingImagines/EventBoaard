@@ -1,106 +1,136 @@
-# EventBoard for Unity
+# EventBoard & Blackboard for Unity
 
-**EventBoard**, Unity projeleri için ScriptableObject tabanlı, decoupled (bağımsız), tip güvenli (strongly-typed) ve Inspector dostu bir event mimarisidir.
+**EventBoard**, Unity projeleri için ScriptableObject tabanlı, decoupled (bağımsız), tip güvenli (strongly-typed) ve Inspector dostu bir **Event Bus + Global Blackboard (Veri Deposu / State Store)** mimarisidir.
+
+Sahneler ve sistemler arasında hem anlık olay haberleşmesini sağlar hem de paylaşılan verileri (Blackboard) sıfır GC ile saklayıp okumanıza olanak tanır.
 
 ---
 
-## 🚀 Özellikler
+## 🚀 Öne Çıkan Özellikler
 
-- **Sıfır Bağımlılık:** Harici hiçbir kütüphaneye veya pakete ihtiyaç duymaz.
-- **Tip Güvenliği (Type-Safe):** `EventKey<T>` ile hem Inspector üzerinden seçim yapabilir hem de kod tarafında tam tip güvenliği elde edersiniz.
-- **Payload Desteği:** Parametresiz sinyaller için `VoidSignal`, veri taşıyan eventler için jenerik tipler (`int`, `float`, `string` veya özel `struct`/`class`).
-- **Gelişmiş Editör ve Arama:** Unity Inspector'da arama destekli açılır liste (AdvancedDropdown) ve tüm event kanallarını izleyebileceğiniz görsel **EventBoard Hub** penceresi.
-- **Performans & Zero-GC:** Optimize edilmiş callback dağıtımı.
+### 1. 📡 Event Bus (Olay Haberleşmesi)
+- **Decoupled (Bağımsız) Mimari:** Sınıflar birbirine doğrudan referans vermez.
+- **Tip Güvenliği (Type-Safe):** `EventKey<T>` ile hem Inspector üzerinden seçim yapılır hem de kod tarafında tam tip kontrolü sağlanır.
+- **VoidSignal Desteği:** Parametresiz sinyaller için sıfır maliyetli tetikleme.
+
+### 2. 🧠 Global Blackboard (Veri Depolama & State Store)
+- **Hafızada Son Değer Saklama (`Value`):** Kanallar en son iletilen değeri tutar. Dinleyici olmasanız bile doğrudan `eventKey.Value` ile okuyabilirsiniz.
+- **Replay Desteği (`replayLatest`):** Geç doğan (spawn olan) nesneler abone olur olmaz son kaydedilen değeri anında alır.
+- **Sessiz Güncelleme (`SetState`):** Olay fırlatmadan sadece veriyi güncelleme veya sadece değer değiştiğinde fırlatma (`SetStateIfChanged`).
+- **DefaultValue & Kalıcılık:** ScriptableObject üzerinden varsayılan değer tanımlama ve sahne geçişlerinde veriyi koruma (`IsPersistent`).
+
+### 3. 🛠️ Editör Araçları & Performans
+- **Inspector Dropdown:** Arama çubuğu olan şık açılır liste (AdvancedDropdown) ile kolay kanal seçimi.
+- **EventBoard Hub Penceresi (`Tools > EventBoard > Hub`):** Tüm event kanallarını, mevcut değerlerini ve dinleyicileri canlı izleme/tetikleme.
+- **Sıfır GC (Zero Allocation):** C# generic delegeleri ve runtime ID eşleştirmeleriyle çöp üretmeyen yapı.
 
 ---
 
 ## 📦 Kurulum (Unity Package Manager / Git URL)
 
-Unity projenizde:
 1. **Window > Package Manager** menüsünü açın.
-2. Sol üstteki **`+`** butonuna tıklayın ve **"Add package from git URL..."** seçin.
-3. GitHub deponuzun URL'sini yapıştırın:
+2. Sol üstteki **`+`** butonuna tıklayıp **"Add package from git URL..."** seçin:
    ```text
    https://github.com/<kullanici_adi>/<repo_adi>.git
    ```
-*(Alternatif olarak yerel diskten test etmek için: **"Add package from disk..."** seçip paketin içindeki `package.json` dosyasını seçebilirsiniz.)*
+*(Yerel test için: **"Add package from disk..."** ile paketin `package.json` dosyasını seçebilirsiniz.)*
 
 ---
 
-## 🛠️ Hızlı Başlangıç
+## 🛠️ Kullanım Kılavuzu
 
-### 1. Event Group Oluşturma
-Proje penceresinde sağ tıklayın:
+### 1. Event Group (Blackboard) Tanımlama
+Proje penceresinde:
 > **Create > EventBoard > Event Group (SO)**
 
-Örneğin `GameEvents.asset` adında bir grup oluşturun ve içerisine kanallar ekleyin:
-- `GameStarted` (Payload Type: `None / VoidSignal`)
-- `PlayerScoreChanged` (Payload Type: `Integer`)
+Örn: `PlayerBoard.asset` oluşturun ve kanalları ekleyin:
+- `Health` (Type: `Integer`, DefaultValue: `100`)
+- `PlayerDied` (Type: `None / VoidSignal`)
 
-### 2. Kodda Dinleme (Subscribe)
+---
+
+### 2. Blackboard Olarak Kullanım (Veri Okuma / Yazma)
 
 ```csharp
 using UnityEngine;
 using Yasin.EventBoard;
 
-public class ScoreUI : MonoBehaviour
+public class PlayerHealth : MonoBehaviour
 {
-    [SerializeField] private EventKey<int> onScoreChanged;
+    [SerializeField] private EventKey<int> healthKey;
+
+    private void Start()
+    {
+        // 1. Blackboard'daki mevcut değeri okuma:
+        int currentHealth = healthKey.Value;
+
+        // 2. Güvenli okuma:
+        if (healthKey.TryGet(out int val))
+        {
+            Debug.Log($"Sağlık: {val}");
+        }
+
+        // 3. Olay fırlatmadan sessizce State güncelleme:
+        healthKey.SetState(80, notify: false);
+
+        // 4. Sadece değer değişmişse güncelle ve uyar:
+        healthKey.SetStateIfChanged(50, notify: true);
+    }
+}
+```
+
+---
+
+### 3. Event Bus Olarak Kullanım (Tetikleme / Dinleme)
+
+```csharp
+using UnityEngine;
+using Yasin.EventBoard;
+
+public class HealthUI : MonoBehaviour
+{
+    [SerializeField] private EventKey<int> healthKey;
 
     private void OnEnable()
     {
-        onScoreChanged.Subscribe(HandleScoreChanged);
+        // replayLatest: true -> Abone olduğu an hafızadaki son değeri hemen fırlatır!
+        healthKey.Subscribe(OnHealthChanged, replayLatest: true);
     }
 
     private void OnDisable()
     {
-        onScoreChanged.Unsubscribe(HandleScoreChanged);
+        healthKey.Unsubscribe(OnHealthChanged);
     }
 
-    private void HandleScoreChanged(int newScore)
+    private void OnHealthChanged(int currentHealth)
     {
-        Debug.Log($"Yeni Skor: {newScore}");
+        Debug.Log($"UI Güncellendi: {currentHealth}");
     }
 }
 ```
 
-### 3. Kodda Tetikleme (Raise)
-
-```csharp
-using UnityEngine;
-using Yasin.EventBoard;
-
-public class ScoreManager : MonoBehaviour
-{
-    [SerializeField] private EventKey<int> onScoreChanged;
-
-    public void AddScore(int amount)
-    {
-        onScoreChanged.Raise(amount);
-    }
-}
-```
+---
 
 ### 4. Parametresiz Sinyaller (VoidSignal)
 
 ```csharp
-[SerializeField] private EventKey<VoidSignal> onGameStarted;
+[SerializeField] private EventKey<VoidSignal> onPlayerDied;
 
 // Tetikleme:
-onGameStarted.Raise();
+onPlayerDied.Raise();
 
 // Dinleme:
-onGameStarted.Subscribe(() => Debug.Log("Oyun Başladı!"));
+onPlayerDied.Subscribe(() => Debug.Log("Oyuncu öldü!"));
 ```
 
 ---
 
 ## 🔍 EventBoard Hub
 
-Projedeki tüm event gruplarını ve aboneleri tek bir pencereden incelemek için:
+Projedeki tüm kanalları, anlık Blackboard değerlerini ve dinleyicileri izlemek için:
 > **Tools > EventBoard > Hub**
 
 ---
 
 ## 📄 Lisans
-MIT License
+MIT License - Yasin Öztürk
