@@ -28,7 +28,6 @@ namespace Yasin.EventBoard
             [SerializeReference]
             public EventPayloadDefinition payload = new VoidPayload();
 
-            [Tooltip("İşaretlenirse sahne geçişlerinde (EventBoard.ClearNonPersistent çağrıldığında) bu kanalın Blackboard değeri silinmez.")]
             [FormerlySerializedAs("isPersistent")]
             [Tooltip("İşaretlenirse bu kanalın Blackboard değeri EventBoard.ExportStateJson() çağrıldığında kaydedilebilir snapshot içine dahil edilir.")]
             public bool isSaveable;
