@@ -1,156 +1,180 @@
 # EventBoard & Blackboard for Unity
 
-**EventBoard**, Unity projeleri için ScriptableObject tabanlı, decoupled (tamamen bağımsız), tip güvenli (strongly-typed) ve Inspector dostu bir **Event Bus + Global Blackboard (State Store)** mimarisidir.
-
-Sahneler ve sistemler arasında hem anlık olay haberleşmesini sağlar hem de paylaşılan verileri (Blackboard) sıfır GC ile saklayıp okumanıza olanak tanır.
+**EventBoard**, Unity projeleri için ScriptableObject tabanlı, decoupled (tamamen bağımsız), tip güvenli (strongly-typed) ve Inspector dostu bir **Event Bus (Olay Haberleşmesi) + Global Blackboard (Merkezi Veri Deposu)** mimarisidir.
 
 ---
 
-## 🚀 Öne Çıkan Özellikler
+## ❓ Bu Araç Ne İşe Yarar? Neden Kullanmalıyım?
 
-### 1. 📂 ScriptableObject ile Modüler Gruplama & GUID Koruması
-- **Kategorize Gruplar:** Event ve Blackboard değişkenleri tek bir devasa listeye yığılmaz; `PlayerEvents`, `CombatEvents`, `UIEvents` gibi bağımsız `.asset` dosyalarında gruplanır.
-- **GUID Koruması (Kopmayan Bağlantılar):** Her kanala arka planda kalıcı bir GUID atanır. Kanalın adını değiştirseniz veya başka bir gruba taşısanız bile **Inspector'daki, sahnelerdeki ve prefab'lardaki bağlantılar ASLA kopmaz**.
-- **Otomatik Yükleme (`Resources/EventBoard`):** Grup dosyalarını bu klasöre koyduğunuzda sistem runtime'da hepsini otomatik tanır ve ayağa kaldırır.
+Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spagetti Kod):
+- UI scripti Oyuncuya referans verir, Oyuncu Görev Yöneticisine referans verir, Düşman UI'a bağlanmaya çalışır...
+- Bir scripti sildiğinizde veya sahneyi değiştirdiğinizde her yer `MissingReferenceException` ve `NullReferenceException` hatalarıyla dolar.
 
-### 2. 🧠 Global Blackboard (Veri Depolama & State Store)
-- **Hafızada Son Değer Saklama (`Value`):** Kanallar en son iletilen değeri tutar. Dinleyici olmasanız bile doğrudan `eventKey.Value` ile okuyabilirsiniz.
-- **Replay Desteği (`replayLatest`):** Geç doğan (spawn olan) nesneler abone olur olmaz son kaydedilen değeri anında alır.
-- **Sessiz Güncelleme (`SetState`):** Olay fırlatmadan sadece veriyi güncelleme veya sadece değer değiştiğinde fırlatma (`SetStateIfChanged`).
-- **DefaultValue & Kalıcılık:** ScriptableObject üzerinden varsayılan değer tanımlama ve sahne geçişlerinde veriyi koruma (`IsPersistent`).
-
-### 3. 📡 Event Bus (Olay Haberleşmesi) & Sıfır GC
-- **Decoupled (Bağımsız) Mimari:** Sınıflar birbirine doğrudan referans vermez; sistemler tamamen birbirinden bağımsız kalır.
-- **Tip Güvenliği (Type-Safe):** `EventKey<T>` ile hem Inspector üzerinden seçim yapılır hem de kod tarafında tam tip kontrolü sağlanır.
-- **VoidSignal Desteği:** Parametresiz sinyaller için sıfır maliyetli tetikleme.
-- **Sıfır GC (Zero Allocation):** C# generic delegeleri ve runtime ID eşleştirmeleriyle çöp üretmeyen yapı.
-
-### 4. 🛠️ Editör Araçları
-- **Hiyerarşik Inspector Dropdown:** Kodunuza bir `EventKey` eklediğinizde Inspector'da arama çubuğu olan şık, grup bazlı hiyerarşik bir liste açılır.
-- **EventBoard Hub (`Tools > EventBoard > Hub`):** Tüm event gruplarını, anlık Blackboard değerlerini ve dinleyicileri canlı izleme/tetikleme paneli.
+**EventBoard bunu tamamen çözer:**
+1. **Sıfır Referans Bağı (Decoupled):** Oyuncu, UI veya Düşman birbirini tanımak zorunda kalmaz. Herkes ortadaki ortak panoya (EventBoard) bakar.
+2. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızasında tutar. Yeni doğan bir karakter veya geç açılan bir UI menüsü, "Skor kaçtı?" diye aramak yerine panodaki son değeri anında okur.
+3. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki ve Prefab'lardaki seçimleriniz asla bozulmaz.
+4. **Sıfır GC (Garbage Collection):** Oyun içinde bellek çöpü üretmez, drop/takılma yapmaz.
 
 ---
 
-## 📦 Kurulum (Unity Package Manager / Git URL)
+## 📦 Kurulum
 
-1. **Window > Package Manager** menüsünü açın.
-2. Sol üstteki **`+`** butonuna tıklayıp **"Add package from git URL..."** seçin:
+### Yöntem 1: Git URL ile (Önerilen)
+1. Unity'de üst menüden **Window > Package Manager** penceresini açın.
+2. Sol üst köşedeki **`+`** simgesine tıklayın ve **"Add package from git URL..."** seçeneğini seçin.
+3. Depo adresini girin:
    ```text
    https://github.com/<kullanici_adi>/<repo_adi>.git
    ```
-*(Yerel test için: **"Add package from disk..."** ile paketin `package.json` dosyasını seçebilirsiniz.)*
+
+### Yöntem 2: Yerel Klasörden (Disk)
+1. Package Manager penceresinde **`+` > "Add package from disk..."** seçin.
+2. Bu paketin bulunduğu klasördeki `package.json` dosyasını seçin.
 
 ---
 
-## 📁 Gruplama Nasıl Yapılır? (Adım Adım)
+## 🚀 Sıfırdan Adım Adım Kurulum ve Kullanım Rehberi
 
-Gruplama, kod içine string yazarak değil; ScriptableObject varlıkları oluşturarak yapılır:
+### Adım 1: Klasör Yapısını Hazırlama
+Unity projenizin `Assets` klasörü altında şu yolu oluşturun:
+> `Assets/Resources/EventBoard/`
 
-1. Proje penceresinde `Assets/Resources/EventBoard/` klasörüne gidin (yoksa oluşturun).
-2. Sağ tıklayın: **`Create > EventBoard > Event Group (SO)`**
-3. Dosyaya grubun adını verin (Örn: `CombatEvents.asset` veya `UIEvents.asset`).
-4. Inspector'da gruba ait kanalları ekleyin:
-   - **Kanal Adı:** `OnTakeDamage`
-   - **Payload Türü:** `Integer`
-   - **Default Value:** `0`
-   - **Is Persistent:** Sahne geçişinde değer silinmesin istiyorsanız işaretleyin.
+*(Not: Sistemin oyun başlarken gruplarınızı otomatik olarak hafızaya alabilmesi için `Resources/EventBoard` altında bulunması şarttır.)*
 
-Kodunuzda `[SerializeField] private EventKey<int> damageKey;` yazdığınızda Inspector listesinde otomatik olarak şöyle görünür:
-```text
-▼ CombatEvents
-   ├── OnTakeDamage (int)
-   └── CriticalHit (int)
-▼ PlayerEvents
-   ├── Health (int)
-   └── Score (int)
+---
+
+### Adım 2: Hangi Dosyayı Nereden Oluşturacağım?
+
+Belirli bir konudaki eventleri ve verileri toplamak için bir **Grup Dosyası** oluşturun:
+1. `Assets/Resources/EventBoard/` klasörüne sağ tıklayın.
+2. Açılan menüden:
+   > **Create > EventBoard > Event Group (SO)**
+3. Dosyaya konseptinize uygun bir isim verin. Örneğin:
+   - `PlayerEvents.asset` (Can, enerji, ölme sinyalleri için)
+   - `UIEvents.asset` (Pencere açılma, buton tıklamaları için)
+   - `GameEvents.asset` (Oyun başladı, duraklatıldı sinyalleri için)
+
+---
+
+### Adım 3: Grup İçine Neler Tanımlayabilirim?
+
+Oluşturduğunuz `.asset` dosyasına tıklayın. Inspector penceresinde **"Add Event"** butonuna basarak içine kanallar ekleyin:
+
+| Kanal Ayarı | Ne İşe Yarar? | Örnek |
+| :--- | :--- | :--- |
+| **Event Name** | Kanalın adı | `PlayerHealth`, `OnLevelCompleted` |
+| **Payload Definition** | Kanalın taşıyacağı veri tipi | `Integer`, `Float`, `Boolean`, `String` veya `Void (Parametresiz)` |
+| **Default Value** | Oyun başındaki varsayılan Blackboard değeri | Sağlık için `100`, Para için `0` |
+| **Is Persistent** | Sahne değiştiğinde değer korunsun mu? | Seviye arası taşınacak veriler için işaretleyin |
+| **Description** | Takım arkadaşlarınız veya sizin için açıklama notu | "Oyuncunun anlık can değeri." |
+
+---
+
+### Adım 4: C# Kodunda Nasıl Kullanılır?
+
+Kod yazarken sınıfınızın en üstüne namespace'i ekleyin:
+```csharp
+using Yasin.EventBoard;
 ```
 
----
-
-## 🛠️ Kod Kullanım Kılavuzu
-
-### 1. Blackboard Olarak Kullanım (Veri Okuma / Yazma)
+#### Senaryo A: Blackboard Olarak Kullanım (Veri Yazma ve Okuma)
+Herhangi bir script, doğrudan panodaki değeri okuyabilir veya güncelleyebilir:
 
 ```csharp
 using UnityEngine;
 using Yasin.EventBoard;
 
-public class PlayerHealth : MonoBehaviour
+public class PlayerController : MonoBehaviour
 {
+    // Inspector'da açılır listeden kanal seçilir
     [SerializeField] private EventKey<int> healthKey;
 
     private void Start()
     {
-        // 1. Blackboard'daki mevcut değeri doğrudan okuma:
+        // 1. Panodaki mevcut değeri doğrudan oku (Sıfır GC):
         int currentHealth = healthKey.Value;
+        Debug.Log($"Başlangıç Canı: {currentHealth}");
 
-        // 2. Güvenli okuma:
-        if (healthKey.TryGet(out int val))
-        {
-            Debug.Log($"Mevcut Sağlık: {val}");
-        }
-
-        // 3. Olay fırlatmadan sessizce veriyi güncelleme:
+        // 2. Panodaki değeri sessizce güncelle (Event fırlatmadan):
         healthKey.SetState(80, notify: false);
 
-        // 4. Sadece değer değişmişse güncelle ve dinleyicileri uyar:
+        // 3. Değer değiştiyse güncelle ve tüm dinleyicileri uyar:
         healthKey.SetStateIfChanged(50, notify: true);
+    }
+
+    public void TakeDamage(int damage)
+    {
+        // Değeri doğrudan yeni haliyle tetikle:
+        healthKey.Raise(healthKey.Value - damage);
     }
 }
 ```
 
----
-
-### 2. Event Bus Olarak Kullanım (Tetikleme / Dinleme)
+#### Senaryo B: Event Dinleme (UI veya Takipçi Scriptler)
+UI scriptiniz hiçbir yere referans vermeden panoyu dinler:
 
 ```csharp
 using UnityEngine;
+using UnityEngine.UI;
 using Yasin.EventBoard;
 
 public class HealthUI : MonoBehaviour
 {
     [SerializeField] private EventKey<int> healthKey;
+    [SerializeField] private Slider healthSlider;
 
     private void OnEnable()
     {
-        // replayLatest: true -> Abone olduğu an hafızadaki son değeri hemen tetikler!
-        healthKey.Subscribe(OnHealthChanged, replayLatest: true);
+        // replayLatest: true sayesinde UI açıldığı an panodaki en güncel can değerini anında alır!
+        healthKey.Subscribe(UpdateHealthBar, replayLatest: true);
     }
 
     private void OnDisable()
     {
-        healthKey.Unsubscribe(OnHealthChanged);
+        // Bellek sızıntısını önlemek için dinlemeyi bırak:
+        healthKey.Unsubscribe(UpdateHealthBar);
     }
 
-    private void OnHealthChanged(int currentHealth)
+    private void UpdateHealthBar(int newHealth)
     {
-        Debug.Log($"UI Güncellendi: {currentHealth}");
+        healthSlider.value = newHealth;
+    }
+}
+```
+
+#### Senaryo C: Verisiz Sinyaller (VoidSignal)
+Sadece bir olayın gerçekleştiğini bildirmek için (`GameStarted`, `PlayerDied`, `PauseGame` vb.):
+
+```csharp
+using UnityEngine;
+using Yasin.EventBoard;
+
+public class GameManager : MonoBehaviour
+{
+    [SerializeField] private EventKey<VoidSignal> onGameStarted;
+
+    public void StartGame()
+    {
+        // Sinyali tetikle:
+        onGameStarted.Raise();
     }
 }
 ```
 
 ---
 
-### 3. Parametresiz Sinyaller (VoidSignal)
+## 🔍 Görsel Kontrol Merkezi (EventBoard Hub)
 
-```csharp
-[SerializeField] private EventKey<VoidSignal> onPlayerDied;
-
-// Tetikleme:
-onPlayerDied.Raise();
-
-// Dinleme:
-onPlayerDied.Subscribe(() => Debug.Log("Oyuncu öldü!"));
-```
-
----
-
-## 🔍 EventBoard Hub
-
-Projedeki tüm kanalları, anlık Blackboard değerlerini ve dinleyicileri izlemek için:
+Tüm projede hangi eventler var, çalışma anında (Play Mode) hafızadaki değerleri ne ve o kanalı kaç kişi dinliyor görmek için:
 > **Tools > EventBoard > Hub**
+
+Bu pencereden:
+- Projedeki tüm ScriptableObject gruplarını listeleyebilir,
+- Canlı olarak Blackboard değerlerini izleyebilir,
+- Test amaçlı Inspector'dan butonla manuel event tetikleyebilirsiniz.
 
 ---
 
 ## 📄 Lisans
-MIT License - Yasin Öztürk
+Bu proje **MIT Lisansı** altında lisanslanmıştır. Yasin Öztürk tarafından geliştirilmiştir. İstediğiniz ticari ve açık kaynak projelerde özgürce kullanabilirsiniz.
