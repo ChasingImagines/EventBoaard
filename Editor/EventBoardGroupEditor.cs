@@ -116,7 +116,7 @@ namespace Yasin.EventBoard.Editor
             {
                 for (int i = 0; i < group.Events.Count; i++)
                 {
-                    if (group.Events[i] != null && group.Events[i].isPersistent)
+                    if (group.Events[i] != null && group.Events[i].isSaveable)
                         persistentCount++;
                 }
             }
@@ -136,7 +136,7 @@ namespace Yasin.EventBoard.Editor
                 }
 
                 EditorGUILayout.LabelField(
-                    $"Event: {total}   |   📌 Kalıcı: {persistentCount}",
+                    $"Event: {total}   |   💾 Kalıcı: {persistentCount}",
                     EditorStyles.miniLabel);
             }
         }
@@ -155,7 +155,7 @@ namespace Yasin.EventBoard.Editor
 
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    _newEventPersistent = EditorGUILayout.ToggleLeft("📌 Kalıcı", _newEventPersistent, GUILayout.Width(85f));
+                    _newEventPersistent = EditorGUILayout.ToggleLeft("💾 Kalıcı", _newEventPersistent, GUILayout.Width(85f));
                     GUILayout.FlexibleSpace();
 
                     GUI.backgroundColor = new Color(0.35f, 0.88f, 0.48f);
@@ -242,7 +242,7 @@ namespace Yasin.EventBoard.Editor
             SerializedProperty guidProp = entryProp.FindPropertyRelative("guid");
             SerializedProperty nameProp = entryProp.FindPropertyRelative("eventName");
             SerializedProperty payloadProp = entryProp.FindPropertyRelative("payload");
-            SerializedProperty persistentProp = entryProp.FindPropertyRelative("isPersistent");
+            SerializedProperty persistentProp = entryProp.FindPropertyRelative("isSaveable");
             SerializedProperty descProp = entryProp.FindPropertyRelative("description");
 
             EventBoardGroup.EventEntry rawEntry = index < group.Events.Count ? group.Events[index] : null;
@@ -259,7 +259,7 @@ namespace Yasin.EventBoard.Editor
 
             using (new EditorGUILayout.VerticalScope(GUI.skin.box))
             {
-                // 1. Satır: Event Adı | Veri Tipi Seçici | Kalıcı (📌) | Sil (✕)
+                // 1. Satır: Event Adı | Veri Tipi Seçici | Kalıcı (💾) | Sil (✕)
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     EditorGUILayout.PropertyField(nameProp, GUIContent.none, GUILayout.MinWidth(140f));
@@ -273,7 +273,7 @@ namespace Yasin.EventBoard.Editor
 
                     bool isPers = persistentProp.boolValue;
                     GUI.backgroundColor = isPers ? new Color(0.4f, 0.85f, 1f) : Color.white;
-                    if (GUILayout.Button(new GUIContent("📌", "Kalıcı (Persistent)"), EditorStyles.miniButton, GUILayout.Width(28f)))
+                    if (GUILayout.Button(new GUIContent("💾", "Kaydedilebilir (Saveable)"), EditorStyles.miniButton, GUILayout.Width(28f)))
                     {
                         persistentProp.boolValue = !isPers;
                     }

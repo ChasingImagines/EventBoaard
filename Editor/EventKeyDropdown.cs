@@ -82,7 +82,7 @@ namespace Yasin.EventBoard.Editor
                     }
 
                     matchedCount++;
-                    string badge = entry.isPersistent ? " 📌" : string.Empty;
+                    string badge = entry.isSaveable ? " 💾" : string.Empty;
                     string displayLabel = $"{entry.eventName}{badge}";
                     groupFolder.AddChild(new ChannelDropdownItem(displayLabel, entry.guid, group.GetFullChannelName(entry)));
                 }

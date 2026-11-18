@@ -100,7 +100,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Birden fazla EventBoardGroup SO içerisindeki tüm kanalların varsayılan (DefaultValue) ve kalıcılık (IsPersistent)
+        /// Birden fazla EventBoardGroup SO içerisindeki tüm kanalların varsayılan (DefaultValue) ve kaydedilebilirlik (IsSaveable)
         /// ayarlarını ilgili generic kanallara (Zero-Boxing ile) yükler.
         /// </summary>
         public static void HydrateFromGroups(IReadOnlyList<EventBoardGroup> groups)
@@ -142,7 +142,7 @@ namespace Yasin.EventBoard
 
                 if (entry.payload != null)
                 {
-                    entry.payload.ConfigureChannel(runtimeId, entry.guid, fullPath, entry.isPersistent);
+                    entry.payload.ConfigureChannel(runtimeId, entry.guid, fullPath, entry.isSaveable);
                 }
             }
         }
@@ -153,7 +153,7 @@ namespace Yasin.EventBoard
             string eventPath,
             T defaultValue,
             bool hasDefaultValue,
-            bool isPersistent)
+            bool isSaveable)
         {
             if (runtimeId == 0)
                 return;
@@ -162,7 +162,7 @@ namespace Yasin.EventBoard
             _idToPath[runtimeId] = eventPath ?? string.Empty;
 
             EventChannelSlot<T> slot = ChannelBank<T>.GetOrCreate(runtimeId, eventPath);
-            slot.ConfigureMetadata(guid, eventPath, defaultValue, hasDefaultValue, isPersistent);
+            slot.ConfigureMetadata(guid, eventPath, defaultValue, hasDefaultValue, isSaveable);
         }
 
         private static void RegisterBankReset(Action resetAction)
@@ -367,7 +367,7 @@ namespace Yasin.EventBoard
             foreach (var kvp in _diagnosticSlots)
             {
                 IEventChannelDiagnostic slot = kvp.Value;
-                if (slot != null && !slot.IsPersistent)
+                if (slot != null && !slot.IsSaveable)
                 {
                     slot.ClearState(restoreDefaults);
                 }

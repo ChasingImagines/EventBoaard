@@ -16,7 +16,7 @@ namespace Yasin.EventBoard
         Type PayloadType { get; }
         bool HasValue { get; }
         bool HasDefaultValue { get; }
-        bool IsPersistent { get; }
+        bool IsSaveable { get; }
         int SubscriberCount { get; }
         int PublishCount { get; }
         int LastPublishFrame { get; }
@@ -28,6 +28,8 @@ namespace Yasin.EventBoard
         void ClearState(bool restoreDefault);
         void ResetChannelCompletely();
         bool TryPublishFromEditor(object boxedValue);
+        string ExportValueJson();
+        bool TryImportValueJson(string json, bool notify);
     }
 
     /// <summary>
@@ -45,7 +47,7 @@ namespace Yasin.EventBoard
         public T DefaultValue;
         public bool HasValue { get; set; }
         public bool HasDefaultValue { get; set; }
-        public bool IsPersistent { get; set; }
+        public bool IsSaveable { get; set; }
 
         public int PublishCount { get; private set; }
         public int LastPublishFrame { get; private set; } = -1;
@@ -61,7 +63,7 @@ namespace Yasin.EventBoard
             RuntimeId = runtimeId;
         }
 
-        public void ConfigureMetadata(string guid, string path, T defaultValue, bool hasDefault, bool isPersistent)
+        public void ConfigureMetadata(string guid, string path, T defaultValue, bool hasDefault, bool isSaveable)
         {
             if (!string.IsNullOrEmpty(guid))
                 Guid = guid;
@@ -70,7 +72,7 @@ namespace Yasin.EventBoard
 
             DefaultValue = defaultValue;
             HasDefaultValue = hasDefault;
-            IsPersistent = isPersistent;
+            IsSaveable = isSaveable;
 
             if (!HasValue && HasDefaultValue)
             {
@@ -289,6 +291,76 @@ namespace Yasin.EventBoard
                 return true;
             }
             return false;
+        }
+
+        public string ExportValueJson()
+        {
+            if (!HasValue && !HasDefaultValue)
+                return null;
+            T val = HasValue ? CurrentValue : DefaultValue;
+            if (val == null)
+                return "null";
+            if (typeof(T) == typeof(string))
+                return JsonUtility.ToJson(new StringWrapper { value = val as string });
+            if (typeof(T).IsPrimitive)
+                return val.ToString();
+            return JsonUtility.ToJson(val);
+        }
+
+        public bool TryImportValueJson(string json, bool notify)
+        {
+            if (string.IsNullOrEmpty(json))
+                return false;
+            try
+            {
+                if (typeof(T) == typeof(string))
+                {
+                    StringWrapper w = JsonUtility.FromJson<StringWrapper>(json);
+                    SetState((T)(object)w.value, notify);
+                    return true;
+                }
+                if (typeof(T) == typeof(int))
+                {
+                    if (int.TryParse(json, out int res))
+                    {
+                        SetState((T)(object)res, notify);
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(float))
+                {
+                    if (float.TryParse(json, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float res))
+                    {
+                        SetState((T)(object)res, notify);
+                        return true;
+                    }
+                }
+                else if (typeof(T) == typeof(bool))
+                {
+                    if (bool.TryParse(json, out bool res))
+                    {
+                        SetState((T)(object)res, notify);
+                        return true;
+                    }
+                }
+                else
+                {
+                    T parsed = JsonUtility.FromJson<T>(json);
+                    SetState(parsed, notify);
+                    return true;
+                }
+            }
+            catch
+            {
+                // Hatalı JSON durumunda DefaultValue korunur
+            }
+            return false;
+        }
+
+        [Serializable]
+        private struct StringWrapper
+        {
+            public string value;
         }
     }
 }

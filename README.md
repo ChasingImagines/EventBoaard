@@ -12,9 +12,11 @@ Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spa
 
 **EventBoard bunu tamamen çözer:**
 1. **Sıfır Referans Bağı (Decoupled):** Oyuncu, UI veya Düşman birbirini tanımak zorunda kalmaz. Herkes ortadaki ortak panoya (EventBoard) bakar.
-2. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızasında tutar. Yeni doğan bir karakter veya geç açılan bir UI menüsü, "Skor kaçtı?" diye aramak yerine panodaki son değeri anında okur.
-3. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki ve Prefab'lardaki seçimleriniz asla bozulmaz.
-4. **Sıfır GC (Garbage Collection):** Oyun içinde bellek çöpü üretmez, drop/takılma yapmaz.
+2. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızasında tutar. Yeni doğan bir karakter veya geç açılan bir UI menüsü, panodaki son değeri anında okur.
+3. **Tertemiz Yaşam Döngüsü (Fresh State):** Çalışma anındaki tüm değişkenler C# statik belleğinde tutulur; ScriptableObject dosyasına yazılmaz. Oyun durduğunda veriler uçar, oyun yeniden açıldığında her şey tertemiz (SO varsayılanlarıyla) başlar.
+4. **İsteğe Bağlı Save/Load Entegrasyonu (`Export/Import`):** Sadece `Saveable (Kaydedilebilir)` işaretlediğiniz veriler tek satırla JSON snapshot olarak dışarı aktarılır ve geri yüklenir. Eksik/hatalı verilerde sistem asla çökmez, SO varsayılanlarını korur.
+5. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki ve Prefab'lardaki seçimleriniz asla bozulmaz.
+6. **Sıfır GC (Garbage Collection):** Oyun içinde bellek çöpü üretmez, drop/takılma yapmaz.
 
 ---
 
@@ -26,6 +28,7 @@ Klasik Unity projelerinde sistemler büyüdükçe kodlar birbirine dolanır (Spa
    ```text
    https://github.com/ChasingImagines/EventBoaard.git
    ```
+
 ---
 
 ## 🚀 Sıfırdan Adım Adım Kurulum ve Kullanım Rehberi
@@ -46,44 +49,40 @@ Elle klasör oluşturmanıza **gerek yoktur**, sistem klasörleri arka planda ke
 
 ---
 
-### Adım 3: Grup İçine Neler Tanımlayabilirim?
+### Adım 2: Grup İçine Neler Tanımlayabilirim?
 
 Oluşturduğunuz `.asset` dosyasına tıklayın. Inspector penceresinde **"Add Event"** butonuna basarak içine kanallar ekleyin:
 
 | Kanal Ayarı | Ne İşe Yarar? | Örnek |
 | :--- | :--- | :--- |
-| **Event Name** | Kanalın adı | `PlayerHealth`, `OnLevelCompleted` |
+| **Event Name** | Kanalın adı | `PlayerHealth`, `Score` |
 | **Payload Definition** | Kanalın taşıyacağı veri tipi | `Integer`, `Float`, `Boolean`, `String` veya `Void (Parametresiz)` |
 | **Default Value** | Oyun başındaki varsayılan Blackboard değeri | Sağlık için `100`, Para için `0` |
-| **Is Persistent** | Sahne değiştiğinde değer korunsun mu? | Seviye arası taşınacak veriler için işaretleyin |
-| **Description** | Takım arkadaşlarınız veya sizin için açıklama notu | "Oyuncunun anlık can değeri." |
+| **💾 Saveable** | İsteğe bağlı Save/Load çıktısına (JSON) dahil edilsin mi? | Skor için işaretleyin; anlık zıplama sinyali için boş bırakın |
+| **Description** | Geliştirici açıklama notu | "Oyuncunun anlık can değeri." |
 
 ---
 
-### Adım 4: C# Kodunda Nasıl Kullanılır?
+### Adım 3: C# Kodunda Nasıl Kullanılır?
 
 Kod yazarken sınıfınızın en üstüne namespace'i ekleyin:
 ```csharp
 using Yasin.EventBoard;
 ```
 
-#### Senaryo A: Blackboard Olarak Kullanım (Veri Yazma ve Okuma)
-Herhangi bir script, doğrudan panodaki değeri okuyabilir veya güncelleyebilir:
-
+#### Senaryo A: Blackboard Olarak Kullanım (Veri Okuma ve Yazma)
 ```csharp
 using UnityEngine;
 using Yasin.EventBoard;
 
 public class PlayerController : MonoBehaviour
 {
-    // Inspector'da açılır listeden kanal seçilir
     [SerializeField] private EventKey<int> healthKey;
 
     private void Start()
     {
         // 1. Panodaki mevcut değeri doğrudan oku (Sıfır GC):
         int currentHealth = healthKey.Value;
-        Debug.Log($"Başlangıç Canı: {currentHealth}");
 
         // 2. Panodaki değeri sessizce güncelle (Event fırlatmadan):
         healthKey.SetState(80, notify: false);
@@ -100,9 +99,7 @@ public class PlayerController : MonoBehaviour
 }
 ```
 
-#### Senaryo B: Event Dinleme (UI veya Takipçi Scriptler)
-UI scriptiniz hiçbir yere referans vermeden panoyu dinler:
-
+#### Senaryo B: Event Dinleme (UI Scriptleri)
 ```csharp
 using UnityEngine;
 using UnityEngine.UI;
@@ -121,7 +118,6 @@ public class HealthUI : MonoBehaviour
 
     private void OnDisable()
     {
-        // Bellek sızıntısını önlemek için dinlemeyi bırak:
         healthKey.Unsubscribe(UpdateHealthBar);
     }
 
@@ -133,35 +129,38 @@ public class HealthUI : MonoBehaviour
 ```
 
 #### Senaryo C: Verisiz Sinyaller (VoidSignal)
-Sadece bir olayın gerçekleştiğini bildirmek için (`GameStarted`, `PlayerDied`, `PauseGame` vb.):
+```csharp
+[SerializeField] private EventKey<VoidSignal> onGameStarted;
+
+// Tetikleme:
+onGameStarted.Raise();
+
+// Dinleme:
+onGameStarted.Subscribe(() => Debug.Log("Oyun Başladı!"));
+```
+
+---
+
+## 💾 İsteğe Bağlı Save / Load (JSON Snapshot)
+
+Eğer projenizde Blackboard verilerini diske kaydetmek isterseniz:
+Sistem dosya yönetimiyle uğraşmaz; sadece JSON çıktısı verir ve alır:
 
 ```csharp
-using UnityEngine;
-using Yasin.EventBoard;
+// 1. Sadece [Saveable] işaretli kanalların anlık değerlerini JSON olarak alır:
+string json = EventBoard.ExportStateJson();
+// Bu string'i kendi Save Sisteminize (PlayerPrefs, Dosya, Bulut vb.) verin.
 
-public class GameManager : MonoBehaviour
-{
-    [SerializeField] private EventKey<VoidSignal> onGameStarted;
-
-    public void StartGame()
-    {
-        // Sinyali tetikle:
-        onGameStarted.Raise();
-    }
-}
+// 2. Kaydedilen veriyi geri yükler (Hatalı/eksik alanlarda DefaultValue korunur):
+EventBoard.ImportStateJson(json, notifyListeners: true);
 ```
 
 ---
 
 ## 🔍 Görsel Kontrol Merkezi (EventBoard Hub)
 
-Tüm projede hangi eventler var, çalışma anında (Play Mode) hafızadaki değerleri ne ve o kanalı kaç kişi dinliyor görmek için:
+Tüm projede hangi eventler var, hafızadaki değerleri ne ve o kanalı kaç kişi dinliyor görmek için:
 > **Tools > EventBoard > Hub**
-
-Bu pencereden:
-- Projedeki tüm ScriptableObject gruplarını listeleyebilir,
-- Canlı olarak Blackboard değerlerini izleyebilir,
-- Test amaçlı Inspector'dan butonla manuel event tetikleyebilirsiniz.
 
 ---
 

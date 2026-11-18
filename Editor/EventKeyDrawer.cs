@@ -26,7 +26,7 @@ namespace Yasin.EventBoard.Editor
             private string _newGroupSOName = "NewEvents";
             private string _newEventName = "NewEvent";
             private string _description = string.Empty;
-            private bool _isPersistent;
+            private bool _isSaveable;
             private bool _focused;
 
             public QuickCreatePopup(
@@ -84,7 +84,7 @@ namespace Yasin.EventBoard.Editor
 
                 GUI.SetNextControlName("QuickEventNameField");
                 _newEventName = EditorGUILayout.TextField("Ad", _newEventName);
-                _isPersistent = EditorGUILayout.Toggle("📌 Kalıcı", _isPersistent);
+                _isSaveable = EditorGUILayout.Toggle("💾 Kalıcı", _isSaveable);
                 _description = EditorGUILayout.TextField("Not", _description);
 
                 if (!_focused)
@@ -136,7 +136,7 @@ namespace Yasin.EventBoard.Editor
 
                 Undo.RecordObject(targetGroup, "Add Event To Group SO");
                 EventPayloadDefinition payload = EventBoardGroup.CreatePayloadForType(_payloadType);
-                EventBoardGroup.EventEntry entry = targetGroup.AddEntry(cleanEventName, payload, _isPersistent, _description);
+                EventBoardGroup.EventEntry entry = targetGroup.AddEntry(cleanEventName, payload, _isSaveable, _description);
                 EditorUtility.SetDirty(targetGroup);
                 AssetDatabase.SaveAssets();
 
@@ -192,7 +192,7 @@ namespace Yasin.EventBoard.Editor
             string tooltip = $"Tip: EventKey<{typeName}>";
             if (resolvedEntry != null && ownerGroup != null)
             {
-                tooltip += $"\nGrup SO: {ownerGroup.GroupName}\nEvent: {resolvedEntry.eventName}\nKalıcı (Persistent): {(resolvedEntry.isPersistent ? "Evet 📌" : "Hayır")}";
+                tooltip += $"\nGrup SO: {ownerGroup.GroupName}\nEvent: {resolvedEntry.eventName}\nKaydedilebilir (Saveable): {(resolvedEntry.isSaveable ? "Evet 💾" : "Hayır")}";
                 if (!string.IsNullOrEmpty(resolvedEntry.description))
                     tooltip += $"\nAçıklama: {resolvedEntry.description}";
             }
@@ -227,7 +227,7 @@ namespace Yasin.EventBoard.Editor
             else
             {
                 GUI.backgroundColor = new Color(0.75f, 0.95f, 0.82f);
-                string badge = resolvedEntry.isPersistent ? " 📌" : string.Empty;
+                string badge = resolvedEntry.isSaveable ? " 💾" : string.Empty;
                 buttonText = $"{ownerGroup.GroupName} / {resolvedEntry.eventName}{badge}";
 
                 // Play Mode'da canlı Blackboard değerini göster

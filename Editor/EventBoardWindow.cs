@@ -173,7 +173,7 @@ namespace Yasin.EventBoard.Editor
                 {
                     if (GUILayout.Button("Temizle", EditorStyles.miniButton, GUILayout.Width(75f)))
                     {
-                        EventBoard.ClearNonPersistent();
+                        EventBoard.ExportStateJson();
                     }
                 }
             }
@@ -221,7 +221,7 @@ namespace Yasin.EventBoard.Editor
                         {
                             using (new EditorGUILayout.HorizontalScope())
                             {
-                                string persistBadge = entry.isPersistent ? " 📌" : string.Empty;
+                                string persistBadge = entry.isSaveable ? " 💾" : string.Empty;
                                 string title = $"{entry.eventName}{persistBadge}";
                                 if (GUILayout.Button(title, EditorStyles.boldLabel))
                                 {
@@ -376,7 +376,7 @@ namespace Yasin.EventBoard.Editor
 
             if (entry.payload != null)
             {
-                entry.payload.ConfigureChannel(entry.RuntimeId, entry.guid, group.GetFullChannelName(entry), entry.isPersistent);
+                entry.payload.ConfigureChannel(entry.RuntimeId, entry.guid, group.GetFullChannelName(entry), entry.isSaveable);
                 if (EventBoard.TryGetDiagnosticSlot(entry.RuntimeId, out IEventChannelDiagnostic createdSlot))
                 {
                     createdSlot.TryPublishFromEditor(boxedPayload);

@@ -29,7 +29,9 @@ namespace Yasin.EventBoard
             public EventPayloadDefinition payload = new VoidPayload();
 
             [Tooltip("İşaretlenirse sahne geçişlerinde (EventBoard.ClearNonPersistent çağrıldığında) bu kanalın Blackboard değeri silinmez.")]
-            public bool isPersistent;
+            [FormerlySerializedAs("isPersistent")]
+            [Tooltip("İşaretlenirse bu kanalın Blackboard değeri EventBoard.ExportStateJson() çağrıldığında kaydedilebilir snapshot içine dahil edilir.")]
+            public bool isSaveable;
 
             [Tooltip("Bu kanalın ne zaman tetiklendiğini ve ne işe yaradığını açıklayan geliştirici notu.")]
             public string description = string.Empty;
@@ -260,7 +262,7 @@ namespace Yasin.EventBoard
         public EventEntry AddEntry(
             string eventName,
             EventPayloadDefinition payload,
-            bool isPersistent = false,
+            bool isSaveable = false,
             string description = "")
         {
             string cleanName = CleanEventName(eventName);
@@ -270,7 +272,7 @@ namespace Yasin.EventBoard
                 guid = Guid.NewGuid().ToString("N"),
                 eventName = cleanName,
                 payload = payload ?? new VoidPayload(),
-                isPersistent = isPersistent,
+                isSaveable = isSaveable,
                 description = description ?? string.Empty
             };
 

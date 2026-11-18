@@ -17,7 +17,7 @@ namespace Yasin.EventBoard
         /// <summary>
         /// Veritabanındaki varsayılan değeri ve kalıcılık bilgisini ilgili generic kanala (Zero-Boxing ile) yükler.
         /// </summary>
-        public abstract void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isPersistent);
+        public abstract void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isSaveable);
 
         /// <summary>
         /// Editör arayüzünde varsayılan değerin metin özetini döndürür.
@@ -38,9 +38,9 @@ namespace Yasin.EventBoard
         public override Type PayloadType => typeof(T);
         public override bool SupportsDefaultValue => true;
 
-        public override void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isPersistent)
+        public override void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isSaveable)
         {
-            EventBoard.ConfigureChannel<T>(runtimeId, guid, eventPath, defaultValue, SupportsDefaultValue, isPersistent);
+            EventBoard.ConfigureChannel<T>(runtimeId, guid, eventPath, defaultValue, SupportsDefaultValue, isSaveable);
         }
 
         public override string GetDefaultValueSummary()
