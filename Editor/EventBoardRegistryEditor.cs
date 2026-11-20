@@ -275,13 +275,17 @@ namespace Yasin.EventBoard.Editor
 
             // Global GUID çakışması onarımı (Ctrl+D ile çoğaltılmış grup SO'ları dahil)
             HashSet<string> globalGuids = new HashSet<string>(StringComparer.Ordinal);
-            RepairDuplicateGuids(existingPass, globalGuids);
-            RepairDuplicateGuids(newPass, globalGuids);
+            bool anyDirty = RepairDuplicateGuids(existingPass, globalGuids);
+            if (RepairDuplicateGuids(newPass, globalGuids))
+            {
+                anyDirty = true;
+            }
 
             EventBoardRegistry registry = FindRegistry();
             if (registry == null && createRegistryIfGroupsExist && allGroups.Count > 0)
             {
                 registry = EnsureRegistryExists();
+                anyDirty = true;
             }
 
             if (registry != null)
@@ -291,17 +295,19 @@ namespace Yasin.EventBoard.Editor
                 if (registry.SyncGroups(allGroups))
                 {
                     EditorUtility.SetDirty(registry);
+                    anyDirty = true;
                 }
             }
 
-            if (saveAssets)
+            if (saveAssets && anyDirty)
             {
                 AssetDatabase.SaveAssets();
             }
         }
 
-        private static void RepairDuplicateGuids(List<EventBoardGroup> groupList, HashSet<string> globalGuids)
+        private static bool RepairDuplicateGuids(List<EventBoardGroup> groupList, HashSet<string> globalGuids)
         {
+            bool anyModified = false;
             for (int g = 0; g < groupList.Count; g++)
             {
                 EventBoardGroup group = groupList[g];
@@ -326,12 +332,14 @@ namespace Yasin.EventBoard.Editor
 
                 if (modified)
                 {
+                    anyModified = true;
                     group.RebuildLookups();
                     EditorUtility.SetDirty(group);
                     EventBoard.HydrateFromGroup(group);
                     Debug.Log($"[EventBoard] '{group.name}' içindeki çakışan/kopyalanmış olay GUID'leri otomatik olarak yenilendi.", group);
                 }
             }
+            return anyModified;
         }
     }
 
