@@ -20,13 +20,15 @@ namespace Yasin.EventBoard.Editor
             private readonly string[] _groupNames;
             private readonly Type _payloadType;
             private readonly Action<string, string> _onCreated;
+            private readonly EventPayloadDefinition _previewPayload;
+            private readonly bool _hasPayloadDefinition;
 
             private int _selectedGroupIndex;
             private bool _createNewGroupSO;
             private string _newGroupSOName = "NewEvents";
             private string _newEventName = "NewEvent";
-            private string _description = string.Empty;
             private bool _isSaveable;
+            private string _description = string.Empty;
             private bool _focused;
 
             public QuickCreatePopup(
@@ -38,6 +40,7 @@ namespace Yasin.EventBoard.Editor
                 _groups = groups ?? Array.Empty<EventBoardGroup>();
                 _payloadType = payloadType ?? typeof(VoidSignal);
                 _onCreated = onCreated;
+                _hasPayloadDefinition = EventBoardGroup.TryCreatePayloadForType(_payloadType, out _previewPayload);
 
                 _groupNames = new string[_groups.Count];
                 for (int i = 0; i < _groups.Count; i++)
@@ -55,47 +58,65 @@ namespace Yasin.EventBoard.Editor
                 }
             }
 
-            public override Vector2 GetWindowSize() => new Vector2(340f, 195f);
+            public override Vector2 GetWindowSize() => new Vector2(360f, _hasPayloadDefinition ? 195f : 245f);
 
             public override void OnGUI(Rect rect)
             {
                 GUILayout.Space(6f);
                 EditorGUILayout.LabelField($"Yeni Event ({GetFriendlyTypeName(_payloadType)})", EditorStyles.boldLabel);
 
-                using (new EditorGUILayout.HorizontalScope())
+                if (!_hasPayloadDefinition)
                 {
-                    if (!_createNewGroupSO && _groupNames.Length > 0)
-                    {
-                        _selectedGroupIndex = EditorGUILayout.Popup("Grup", _selectedGroupIndex, _groupNames);
-                        if (GUILayout.Button("+ Grup", EditorStyles.miniButton, GUILayout.Width(60f)))
-                        {
-                            _createNewGroupSO = true;
-                        }
-                    }
-                    else
-                    {
-                        _newGroupSOName = EditorGUILayout.TextField("Yeni Grup", _newGroupSOName);
-                        if (_groupNames.Length > 0 && GUILayout.Button("Seç", EditorStyles.miniButton, GUILayout.Width(50f)))
-                        {
-                            _createNewGroupSO = false;
-                        }
-                    }
+                    EditorGUILayout.HelpBox(
+                        $"'{_payloadType.Name}' tipi için bir EventPayloadDefinition<{_payloadType.Name}> sınıfı tanımlı değil.\n\n" +
+                        $"Örnek:\n[Serializable] public sealed class {_payloadType.Name}Payload : EventPayloadDefinition<{_payloadType.Name}>\n{{\n    public override string DisplayName => \"{_payloadType.Name}\";\n}}",
+                        MessageType.Error);
                 }
 
-                GUI.SetNextControlName("QuickEventNameField");
-                _newEventName = EditorGUILayout.TextField("Ad", _newEventName);
-                _isSaveable = EditorGUILayout.Toggle("💾 Kalıcı", _isSaveable);
-                _description = EditorGUILayout.TextField("Not", _description);
-
-                if (!_focused)
+                using (new EditorGUI.DisabledScope(!_hasPayloadDefinition))
                 {
-                    EditorGUI.FocusTextInControl("QuickEventNameField");
-                    _focused = true;
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        if (!_createNewGroupSO && _groupNames.Length > 0)
+                        {
+                            _selectedGroupIndex = EditorGUILayout.Popup("Grup", _selectedGroupIndex, _groupNames);
+                            if (GUILayout.Button("+ Grup", EditorStyles.miniButton, GUILayout.Width(60f)))
+                            {
+                                _createNewGroupSO = true;
+                            }
+                        }
+                        else
+                        {
+                            _newGroupSOName = EditorGUILayout.TextField("Yeni Grup", _newGroupSOName);
+                            if (_groupNames.Length > 0 && GUILayout.Button("Seç", EditorStyles.miniButton, GUILayout.Width(50f)))
+                            {
+                                _createNewGroupSO = false;
+                            }
+                        }
+                    }
+
+                    GUI.SetNextControlName("QuickEventNameField");
+                    _newEventName = EditorGUILayout.TextField("Ad", _newEventName);
+
+                    bool supportsSaveable = _previewPayload != null && _previewPayload.SupportsSaveable;
+                    using (new EditorGUI.DisabledScope(!supportsSaveable))
+                    {
+                        _isSaveable = supportsSaveable && EditorGUILayout.Toggle("💾 Kalıcı", _isSaveable);
+                    }
+
+                    _description = EditorGUILayout.TextField("Not", _description);
+
+                    if (!_focused)
+                    {
+                        EditorGUI.FocusTextInControl("QuickEventNameField");
+                        _focused = true;
+                    }
                 }
 
                 GUILayout.FlexibleSpace();
 
-                bool enterPressed = Event.current.type == EventType.KeyDown &&
+                bool enterPressed = _hasPayloadDefinition &&
+                                    Event.current.type == EventType.KeyDown &&
                                     (Event.current.keyCode == KeyCode.Return || Event.current.keyCode == KeyCode.KeypadEnter);
 
                 using (new EditorGUILayout.HorizontalScope())
@@ -105,18 +126,24 @@ namespace Yasin.EventBoard.Editor
                         editorWindow.Close();
                     }
 
-                    GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
-                    if (GUILayout.Button("Ekle", GUILayout.Height(24f)) || enterPressed)
+                    using (new EditorGUI.DisabledScope(!_hasPayloadDefinition))
                     {
-                        CreateAndAssign();
+                        GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
+                        if (GUILayout.Button("Ekle", GUILayout.Height(24f)) || enterPressed)
+                        {
+                            CreateAndAssign();
+                        }
+                        GUI.backgroundColor = Color.white;
                     }
-                    GUI.backgroundColor = Color.white;
                 }
                 GUILayout.Space(4f);
             }
 
             private void CreateAndAssign()
             {
+                if (!EventBoardGroup.TryCreatePayloadForType(_payloadType, out EventPayloadDefinition payload))
+                    return;
+
                 string cleanEventName = EventBoardGroup.CleanEventName(_newEventName);
                 if (string.IsNullOrEmpty(cleanEventName))
                     return;
@@ -124,7 +151,7 @@ namespace Yasin.EventBoard.Editor
                 EventBoardGroup targetGroup = null;
                 if (_createNewGroupSO || _groups.Count == 0)
                 {
-                    targetGroup = CreateGroupAssetInResources(_newGroupSOName);
+                    targetGroup = EventBoardRegistryUtility.CreateGroupAsset(_newGroupSOName);
                 }
                 else if (_selectedGroupIndex >= 0 && _selectedGroupIndex < _groups.Count)
                 {
@@ -135,8 +162,8 @@ namespace Yasin.EventBoard.Editor
                     return;
 
                 Undo.RecordObject(targetGroup, "Add Event To Group SO");
-                EventPayloadDefinition payload = EventBoardGroup.CreatePayloadForType(_payloadType);
-                EventBoardGroup.EventEntry entry = targetGroup.AddEntry(cleanEventName, payload, _isSaveable, _description);
+                bool saveable = _isSaveable && payload.SupportsSaveable;
+                EventBoardGroup.EventEntry entry = targetGroup.AddEntry(cleanEventName, payload, saveable, _description);
                 EditorUtility.SetDirty(targetGroup);
                 AssetDatabase.SaveAssets();
 
@@ -155,14 +182,13 @@ namespace Yasin.EventBoard.Editor
             Type payloadType = ExtractPayloadType(fieldInfo != null ? fieldInfo.FieldType : null);
             string typeName = GetFriendlyTypeName(payloadType);
 
-            IReadOnlyList<EventBoardGroup> groups = EventBoardGroup.GetAllGroups();
-
-            string currentGuid = guidProp != null ? guidProp.stringValue : string.Empty;
-            string currentPath = pathProp != null ? pathProp.stringValue : string.Empty;
+            bool hasMultipleValues = guidProp != null && guidProp.hasMultipleDifferentValues;
+            string currentGuid = !hasMultipleValues && guidProp != null ? guidProp.stringValue : string.Empty;
+            string currentPath = !hasMultipleValues && pathProp != null ? pathProp.stringValue : string.Empty;
 
             EventBoardGroup ownerGroup = null;
             EventBoardGroup.EventEntry resolvedEntry = null;
-            bool isAssigned = !string.IsNullOrEmpty(currentGuid);
+            bool isAssigned = !hasMultipleValues && !string.IsNullOrEmpty(currentGuid);
             bool isMissing = false;
             bool isTypeMismatch = false;
 
@@ -170,21 +196,14 @@ namespace Yasin.EventBoard.Editor
             {
                 if (EventBoardGroup.TryFindByGuid(currentGuid, out ownerGroup, out resolvedEntry))
                 {
-                    string fullDisplay = ownerGroup.GetFullChannelName(resolvedEntry);
-                    if (pathProp != null && !string.Equals(currentPath, fullDisplay, StringComparison.Ordinal))
+                    if (resolvedEntry != null && payloadType != null && resolvedEntry.PayloadType != payloadType)
                     {
-                        pathProp.stringValue = fullDisplay;
-                        currentPath = fullDisplay;
+                        isTypeMismatch = true;
                     }
                 }
                 else
                 {
                     isMissing = true;
-                }
-
-                if (resolvedEntry != null && payloadType != null && resolvedEntry.PayloadType != payloadType)
-                {
-                    isTypeMismatch = true;
                 }
             }
 
@@ -209,7 +228,12 @@ namespace Yasin.EventBoard.Editor
             Color prevBg = GUI.backgroundColor;
             string buttonText;
 
-            if (!isAssigned)
+            if (hasMultipleValues)
+            {
+                GUI.backgroundColor = new Color(0.95f, 0.9f, 0.7f);
+                buttonText = "— (Karışık Değerler)";
+            }
+            else if (!isAssigned)
             {
                 GUI.backgroundColor = new Color(1f, 0.88f, 0.45f);
                 buttonText = $"Seç ({typeName})";
@@ -291,45 +315,6 @@ namespace Yasin.EventBoard.Editor
             }
 
             EditorGUI.EndProperty();
-        }
-
-        public static EventBoardGroup CreateGroupAssetInResources(string groupAssetName, bool ping = false)
-        {
-            string cleanName = EventBoardGroup.CleanEventName(groupAssetName);
-            if (string.IsNullOrEmpty(cleanName))
-                cleanName = "NewEvents";
-
-            if (!AssetDatabase.IsValidFolder("Assets/Resources"))
-            {
-                AssetDatabase.CreateFolder("Assets", "Resources");
-            }
-
-            string folderPath = $"Assets/Resources/{EventBoardGroup.DefaultResourcesFolder}";
-            if (!AssetDatabase.IsValidFolder(folderPath))
-            {
-                AssetDatabase.CreateFolder("Assets/Resources", EventBoardGroup.DefaultResourcesFolder);
-            }
-
-            string assetPath = $"{folderPath}/{cleanName}.asset";
-            EventBoardGroup existing = AssetDatabase.LoadAssetAtPath<EventBoardGroup>(assetPath);
-            if (existing != null)
-            {
-                if (ping) EditorGUIUtility.PingObject(existing);
-                return existing;
-            }
-
-            EventBoardGroup created = ScriptableObject.CreateInstance<EventBoardGroup>();
-            AssetDatabase.CreateAsset(created, assetPath);
-            EditorUtility.SetDirty(created);
-            AssetDatabase.SaveAssets();
-            EventBoardGroup.InvalidateGroupCache();
-
-            if (ping)
-            {
-                EditorGUIUtility.PingObject(created);
-            }
-
-            return created;
         }
 
         public static Type ExtractPayloadType(Type fieldType)

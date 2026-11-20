@@ -7,14 +7,11 @@ namespace Yasin.EventBoard
 {
     /// <summary>
     /// Belirli bir kategoriye/gruba ait EventBoard kanallarını liste olarak tutan ScriptableObject.
-    /// Gruplama işlemi kod içindeki stringlerle değil, ayrı EventBoardGroup SO varlıklarıyla yapılır.
-    /// Çalışma zamanında (Runtime) EventBoardManager bu SO'ların tamamını bünyesinde toplar.
+    /// Projedeki herhangi bir klasörde saklanabilir; Editör tarafından otomatik olarak EventBoardRegistry ile senkronize edilir.
     /// </summary>
     [CreateAssetMenu(fileName = "NewEventGroup", menuName = "EventBoard/Event Group (SO)", order = 10)]
     public sealed class EventBoardGroup : ScriptableObject
     {
-        public const string DefaultResourcesFolder = "EventBoard";
-
         [Serializable]
         public sealed class EventEntry
         {
@@ -48,8 +45,10 @@ namespace Yasin.EventBoard
         private readonly Dictionary<string, EventEntry> _byGuid = new Dictionary<string, EventEntry>(StringComparer.Ordinal);
         private bool _lookupBuilt;
 
+#if UNITY_EDITOR
         private static readonly List<EventBoardGroup> _cachedGroups = new List<EventBoardGroup>();
         private static bool _groupsLoaded;
+#endif
 
         public string GroupName => name;
 
@@ -62,14 +61,22 @@ namespace Yasin.EventBoard
             return $"{GroupName}/{entry.eventName}";
         }
 
-        /// <summary>
-        /// Belirtilen Resources klasöründeki (ve Editör'de AssetDatabase'deki) tüm EventBoardGroup SO'larını döndürür.
-        /// </summary>
-        public static IReadOnlyList<EventBoardGroup> GetAllGroups(string resourcesFolder = DefaultResourcesFolder, bool forceRefresh = false)
+        internal static void ResetStaticState()
         {
+#if UNITY_EDITOR
+            _cachedGroups.Clear();
+            _groupsLoaded = false;
+#endif
+        }
+
+        /// <summary>
+        /// Projedeki (Editör'de AssetDatabase'deki, Build ortamında ise EventBoardRegistry + dinamik kayıtlardaki) tüm EventBoardGroup SO'larını döndürür.
+        /// </summary>
+        public static IReadOnlyList<EventBoardGroup> GetAllGroups(bool forceRefresh = false)
+        {
+#if UNITY_EDITOR
             if (_groupsLoaded && !forceRefresh)
             {
-                // Silinmiş (null) referans varsa yenile
                 bool hasNull = false;
                 for (int i = 0; i < _cachedGroups.Count; i++)
                 {
@@ -86,22 +93,6 @@ namespace Yasin.EventBoard
             _cachedGroups.Clear();
             HashSet<EventBoardGroup> uniqueSet = new HashSet<EventBoardGroup>();
 
-            string folder = string.IsNullOrWhiteSpace(resourcesFolder) ? DefaultResourcesFolder : resourcesFolder;
-            EventBoardGroup[] loadedFromResources = Resources.LoadAll<EventBoardGroup>(folder);
-            if (loadedFromResources != null)
-            {
-                for (int i = 0; i < loadedFromResources.Length; i++)
-                {
-                    EventBoardGroup g = loadedFromResources[i];
-                    if (g != null && uniqueSet.Add(g))
-                    {
-                        g.EnsureLookups();
-                        _cachedGroups.Add(g);
-                    }
-                }
-            }
-
-#if UNITY_EDITOR
             string[] guids = UnityEditor.AssetDatabase.FindAssets("t:EventBoardGroup");
             if (guids != null)
             {
@@ -116,16 +107,20 @@ namespace Yasin.EventBoard
                     }
                 }
             }
-#endif
 
             _cachedGroups.Sort((a, b) => string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase));
             _groupsLoaded = true;
             return _cachedGroups;
+#else
+            return EventBoard.GetRegisteredGroups();
+#endif
         }
 
         public static void InvalidateGroupCache()
         {
+#if UNITY_EDITOR
             _groupsLoaded = false;
+#endif
         }
 
         /// <summary>
@@ -183,7 +178,7 @@ namespace Yasin.EventBoard
                     events[i] = entry;
                 }
 
-                // Boş veya çoğaltılmış (Ctrl+D) GUID'leri benzersizleştir
+                // Boş veya aynı grup içinde çoğaltılmış GUID'leri benzersizleştir
                 if (string.IsNullOrWhiteSpace(entry.guid) || !seenGuids.Add(entry.guid))
                 {
                     entry.guid = Guid.NewGuid().ToString("N");
@@ -202,6 +197,11 @@ namespace Yasin.EventBoard
                 if (entry.payload == null)
                 {
                     entry.payload = new VoidPayload();
+                }
+
+                if (entry.isSaveable && !entry.payload.SupportsSaveable)
+                {
+                    entry.isSaveable = false;
                 }
             }
         }
@@ -265,13 +265,14 @@ namespace Yasin.EventBoard
             string description = "")
         {
             string cleanName = CleanEventName(eventName);
+            EventPayloadDefinition resolvedPayload = payload ?? new VoidPayload();
 
             EventEntry created = new EventEntry
             {
                 guid = Guid.NewGuid().ToString("N"),
                 eventName = cleanName,
-                payload = payload ?? new VoidPayload(),
-                isSaveable = isSaveable,
+                payload = resolvedPayload,
+                isSaveable = isSaveable && resolvedPayload.SupportsSaveable,
                 description = description ?? string.Empty
             };
 
@@ -293,8 +294,10 @@ namespace Yasin.EventBoard
             {
                 if (events[i] != null && string.Equals(events[i].guid, guid, StringComparison.Ordinal))
                 {
+                    int removedId = events[i].RuntimeId;
                     events.RemoveAt(i);
                     RebuildLookups();
+                    EventBoard.RemoveChannelById(removedId);
                     return true;
                 }
             }
@@ -302,30 +305,61 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Verilen C# veri tipine (T) karşılık gelen varsayılan EventPayloadDefinition örneğini oluşturur.
+        /// Verilen C# veri tipine (T) karşılık gelen EventPayloadDefinition örneğini bulup oluşturmayı dener.
+        /// Tanımlı değilse sessizce VoidPayload üretmez; false döndürür.
         /// </summary>
-        public static EventPayloadDefinition CreatePayloadForType(Type targetType)
+        public static bool TryCreatePayloadForType(Type targetType, out EventPayloadDefinition payload)
         {
             if (targetType == null || targetType == typeof(VoidSignal))
-                return new VoidPayload();
+            {
+                payload = new VoidPayload();
+                return true;
+            }
             if (targetType == typeof(int))
-                return new IntPayload();
+            {
+                payload = new IntPayload();
+                return true;
+            }
             if (targetType == typeof(float))
-                return new FloatPayload();
+            {
+                payload = new FloatPayload();
+                return true;
+            }
             if (targetType == typeof(bool))
-                return new BoolPayload();
+            {
+                payload = new BoolPayload();
+                return true;
+            }
             if (targetType == typeof(string))
-                return new StringPayload();
+            {
+                payload = new StringPayload();
+                return true;
+            }
             if (targetType == typeof(Vector2))
-                return new Vector2Payload();
+            {
+                payload = new Vector2Payload();
+                return true;
+            }
             if (targetType == typeof(Vector3))
-                return new Vector3Payload();
+            {
+                payload = new Vector3Payload();
+                return true;
+            }
             if (targetType == typeof(Color))
-                return new ColorPayload();
+            {
+                payload = new ColorPayload();
+                return true;
+            }
             if (targetType == typeof(GameObject))
-                return new GameObjectPayload();
+            {
+                payload = new GameObjectPayload();
+                return true;
+            }
             if (targetType == typeof(Transform))
-                return new TransformPayload();
+            {
+                payload = new TransformPayload();
+                return true;
+            }
 
             Type genericBase = typeof(EventPayloadDefinition<>).MakeGenericType(targetType);
             foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
@@ -345,12 +379,22 @@ namespace Yasin.EventBoard
                     Type t = types[i];
                     if (!t.IsAbstract && genericBase.IsAssignableFrom(t))
                     {
-                        return (EventPayloadDefinition)Activator.CreateInstance(t);
+                        try
+                        {
+                            payload = (EventPayloadDefinition)Activator.CreateInstance(t);
+                            if (payload != null)
+                                return true;
+                        }
+                        catch
+                        {
+                            // Parametresiz kurucusu olmayanları atla
+                        }
                     }
                 }
             }
 
-            return new VoidPayload();
+            payload = null;
+            return false;
         }
     }
 }

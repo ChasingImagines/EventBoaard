@@ -8,22 +8,25 @@ using UnityEngine;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// EventBoard için 3 sekmeli profesyonel mühendislik ve hata ayıklama penceresi:
+    /// EventBoard için 4 sekmeli profesyonel mühendislik ve hata ayıklama penceresi:
     /// 1) Canlı Blackboard Monitörü &amp; Test Tetikleyici (Grup SO bazında kırılımlı)
-    /// 2) Sahne Bağlantı Matrisi
+    /// 2) Sahne &amp; Proje Bağlantı Matrisi
     /// 3) Statik Proje Denetimi (Audit)
+    /// 4) Zero-GC Performans Testi
     /// </summary>
     public sealed class EventBoardWindow : EditorWindow
     {
         private sealed class SceneKeyUsage
         {
-            public MonoBehaviour Component;
+            public UnityEngine.Object Context;
             public string FieldName;
             public string Guid;
             public string Path;
             public Type ValueType;
+            public Type ExpectedPayloadType;
             public bool IsAssigned;
             public bool IsMissingInGroups;
+            public bool IsTypeMismatch;
         }
 
         private int _selectedTab;
@@ -40,6 +43,7 @@ namespace Yasin.EventBoard.Editor
         private Vector2 _scrollPos;
         private int _benchmarkIterations = 100000;
         private string _lastBenchmarkReport = string.Empty;
+        private bool _includeProjectAssets;
 
         // Canlı Test Tetikleyici durumu
         private string _selectedChannelGuid = string.Empty;
@@ -53,6 +57,7 @@ namespace Yasin.EventBoard.Editor
 
         // Sahne ve Denetim önbelleği
         private readonly List<SceneKeyUsage> _sceneUsages = new List<SceneKeyUsage>();
+        private readonly List<SceneKeyUsage> _entryUsageBuffer = new List<SceneKeyUsage>(8);
         private readonly List<string> _orphanChannelPaths = new List<string>();
         private readonly List<Delegate> _subscriberBuffer = new List<Delegate>(8);
         private bool _matrixBuilt;
@@ -61,7 +66,7 @@ namespace Yasin.EventBoard.Editor
         public static void OpenWindow()
         {
             EventBoardWindow window = GetWindow<EventBoardWindow>("EventBoard Hub");
-            window.minSize = new Vector2(700f, 440f);
+            window.minSize = new Vector2(720f, 440f);
             window.Show();
         }
 
@@ -97,13 +102,13 @@ namespace Yasin.EventBoard.Editor
             if (groups == null || groups.Count == 0)
             {
                 EditorGUILayout.Space(12f);
-                EditorGUILayout.HelpBox("Resources/EventBoard klasöründe henüz bir EventBoardGroup SO varlığı bulunamadı.", MessageType.Warning);
+                EditorGUILayout.HelpBox("Proje içinde henüz bir EventBoardGroup SO varlığı bulunamadı.", MessageType.Warning);
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     _newGroupAssetName = EditorGUILayout.TextField("Yeni Grup SO", _newGroupAssetName);
                     if (GUILayout.Button("+ Oluştur", GUILayout.Height(24f), GUILayout.Width(100f)))
                     {
-                        EventKeyDrawer.CreateGroupAssetInResources(_newGroupAssetName, ping: true);
+                        EventBoardRegistryUtility.CreateGroupAsset(_newGroupAssetName, ping: true);
                     }
                 }
                 return;
@@ -154,9 +159,20 @@ namespace Yasin.EventBoard.Editor
                     GUI.FocusControl(null);
                 }
 
+                if (GUILayout.Button("⚙️ Registry", EditorStyles.toolbarButton, GUILayout.Width(76f)))
+                {
+                    EventBoardRegistry reg = EventBoardRegistryUtility.EnsureRegistryExists();
+                    if (reg != null)
+                    {
+                        Selection.activeObject = reg;
+                        EditorGUIUtility.PingObject(reg);
+                    }
+                }
+
                 if (GUILayout.Button("🔄 Yenile", EditorStyles.toolbarButton, GUILayout.Width(68f)))
                 {
                     EventBoardGroup.InvalidateGroupCache();
+                    EventBoardRegistryUtility.SyncAllGroups(createRegistryIfGroupsExist: true, saveAssets: false);
                     RefreshSceneMatrix();
                 }
             }
@@ -171,10 +187,24 @@ namespace Yasin.EventBoard.Editor
 
                 if (Application.isPlaying)
                 {
-                    if (GUILayout.Button("Temizle", EditorStyles.miniButton, GUILayout.Width(75f)))
+                    if (GUILayout.Button("Değerleri Sıfırla", EditorStyles.miniButton, GUILayout.Width(105f)))
                     {
-                        EventBoard.ResetAll();
+                        EventBoard.ClearAllValues(restoreDefaults: true);
                     }
+
+                    GUI.backgroundColor = new Color(1f, 0.55f, 0.55f);
+                    if (GUILayout.Button("Tam Sıfırla", EditorStyles.miniButton, GUILayout.Width(85f)))
+                    {
+                        if (EditorUtility.DisplayDialog(
+                                "EventBoard Tam Sıfırlama",
+                                "Tüm çalışma zamanı Blackboard değerleri VE aktif abonelikler silinecek. Devam etmek istiyor musunuz?",
+                                "Evet, Sıfırla",
+                                "İptal"))
+                        {
+                            EventBoard.ResetAll();
+                        }
+                    }
+                    GUI.backgroundColor = Color.white;
                 }
             }
 
@@ -391,8 +421,10 @@ namespace Yasin.EventBoard.Editor
                 RefreshSceneMatrix();
             }
 
+            DrawAssetScanToggle();
+
             EditorGUILayout.HelpBox(
-                $"Aktif sahnede toplam {_sceneUsages.Count} adet EventKey<T> referansı bulundu.",
+                $"Taranan kapsamda toplam {_sceneUsages.Count} adet EventKey<T> referansı bulundu.",
                 MessageType.Info);
 
             for (int g = 0; g < groups.Count; g++)
@@ -412,44 +444,44 @@ namespace Yasin.EventBoard.Editor
                     if (!MatchesFilter(fullName, entry.description))
                         continue;
 
-                    List<SceneKeyUsage> usagesForEntry = new List<SceneKeyUsage>();
+                    _entryUsageBuffer.Clear();
                     for (int u = 0; u < _sceneUsages.Count; u++)
                     {
                         SceneKeyUsage usage = _sceneUsages[u];
                         if (string.Equals(usage.Guid, entry.guid, StringComparison.Ordinal))
                         {
-                            usagesForEntry.Add(usage);
+                            _entryUsageBuffer.Add(usage);
                         }
                     }
 
                     using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
                     {
                         EditorGUILayout.LabelField(
-                            $"📦 {fullName}   ({EventKeyDrawer.GetFriendlyTypeName(entry.PayloadType)})   —   Sahne Bağlantısı: {usagesForEntry.Count}",
+                            $"📦 {fullName}   ({EventKeyDrawer.GetFriendlyTypeName(entry.PayloadType)})   —   Bağlantı: {_entryUsageBuffer.Count}",
                             EditorStyles.boldLabel);
 
-                        if (usagesForEntry.Count == 0)
+                        if (_entryUsageBuffer.Count == 0)
                         {
-                            EditorGUILayout.LabelField("   Bu sahnede doğrudan bağlanan bir MonoBehaviour yok.", EditorStyles.miniLabel);
+                            EditorGUILayout.LabelField("   Bu kapsamda doğrudan bağlanan bir referans yok.", EditorStyles.miniLabel);
                         }
                         else
                         {
-                            for (int k = 0; k < usagesForEntry.Count; k++)
+                            for (int k = 0; k < _entryUsageBuffer.Count; k++)
                             {
-                                SceneKeyUsage usage = usagesForEntry[k];
-                                if (usage.Component == null)
+                                SceneKeyUsage usage = _entryUsageBuffer[k];
+                                if (usage.Context == null)
                                     continue;
 
                                 using (new EditorGUILayout.HorizontalScope())
                                 {
+                                    string ownerLabel = GetUsageContextName(usage.Context);
                                     EditorGUILayout.LabelField(
-                                        $"   • {usage.Component.gameObject.name}  [{usage.Component.GetType().Name}.{usage.FieldName}]",
+                                        $"   • {ownerLabel}  [{usage.Context.GetType().Name}.{usage.FieldName}]",
                                         EditorStyles.miniLabel);
 
                                     if (GUILayout.Button("🎯 Seç", EditorStyles.miniButton, GUILayout.Width(60f)))
                                     {
-                                        Selection.activeGameObject = usage.Component.gameObject;
-                                        EditorGUIUtility.PingObject(usage.Component.gameObject);
+                                        SelectUsageContext(usage.Context);
                                     }
                                 }
                             }
@@ -466,54 +498,100 @@ namespace Yasin.EventBoard.Editor
                 RefreshSceneMatrix();
             }
 
+            // 1) Registry ve PreloadedAssets sağlık kontrolü
+            EventBoardRegistry registry = EventBoardRegistryUtility.FindRegistry();
+            if (registry == null)
+            {
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.HelpBox(
+                        "⚠️ EventBoardRegistry asset'i henüz oluşturulmamış. Build ortamında grupların otomatik yüklenmesi için oluşturun.",
+                        MessageType.Warning);
+                    if (GUILayout.Button("⚙️ Registry Oluştur", GUILayout.Width(140f), GUILayout.Height(36f)))
+                    {
+                        EventBoardRegistryUtility.SyncAllGroups(createRegistryIfGroupsExist: true, saveAssets: true);
+                    }
+                }
+            }
+            else if (!EventBoardRegistryUtility.IsInPreloadedAssets(registry))
+            {
+                using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.HelpBox(
+                        "⚠️ EventBoardRegistry varlığı Preloaded Assets listesinde kayıtlı değil. Player Build'de gruplar yüklenmeyebilir.",
+                        MessageType.Warning);
+                    if (GUILayout.Button("📌 Preloaded'a Ekle", GUILayout.Width(140f), GUILayout.Height(36f)))
+                    {
+                        EventBoardRegistryUtility.EnsurePreloaded(registry);
+                    }
+                }
+            }
+            else
+            {
+                EditorGUILayout.HelpBox("✅ EventBoardRegistry aktif ve PreloadedAssets içinde kayıtlı (Build hazır).", MessageType.Info);
+            }
+
+            DrawAssetScanToggle();
+
             int unassignedCount = 0;
             int missingCount = 0;
+            int mismatchCount = 0;
 
             for (int i = 0; i < _sceneUsages.Count; i++)
             {
                 if (!_sceneUsages[i].IsAssigned) unassignedCount++;
                 else if (_sceneUsages[i].IsMissingInGroups) missingCount++;
+                else if (_sceneUsages[i].IsTypeMismatch) mismatchCount++;
             }
 
-            if (unassignedCount == 0 && missingCount == 0)
+            if (unassignedCount == 0 && missingCount == 0 && mismatchCount == 0)
             {
-                EditorGUILayout.HelpBox("✅ Harika! Aktif sahnede atanmamış (Unassigned) veya kırık (Missing) hiçbir EventKey<T> referansı bulunmadı.", MessageType.Info);
+                EditorGUILayout.HelpBox("✅ Harika! Taranan kapsamda atanmamış (Unassigned), kırık (Missing) veya tip uyumsuz hiçbir EventKey<T> referansı bulunmadı.", MessageType.Info);
             }
             else
             {
                 EditorGUILayout.HelpBox(
-                    $"⚠️ Sahnede {unassignedCount} atanmamış alan ve {missingCount} Grup SO'larından silinmiş referans tespit edildi:",
+                    $"⚠️ {unassignedCount} atanmamış alan, {missingCount} silinmiş referans ve {mismatchCount} tip uyumsuzluğu tespit edildi:",
                     MessageType.Warning);
 
                 for (int i = 0; i < _sceneUsages.Count; i++)
                 {
                     SceneKeyUsage usage = _sceneUsages[i];
-                    if (usage.Component == null || (usage.IsAssigned && !usage.IsMissingInGroups))
+                    if (usage.Context == null || (usage.IsAssigned && !usage.IsMissingInGroups && !usage.IsTypeMismatch))
                         continue;
 
                     using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                     {
-                        string issue = !usage.IsAssigned
-                            ? "⚠️ Atanmamış (Boş) Alan"
-                            : $"❌ Silinmiş Event ({usage.Path})";
+                        string issue;
+                        if (!usage.IsAssigned)
+                        {
+                            issue = "⚠️ Atanmamış (Boş) Alan";
+                        }
+                        else if (usage.IsMissingInGroups)
+                        {
+                            issue = $"❌ Silinmiş Event ({usage.Path})";
+                        }
+                        else
+                        {
+                            issue = $"⚠️ Tip Uyumsuz (Alan: {EventKeyDrawer.GetFriendlyTypeName(usage.ValueType)} vs Grup: {EventKeyDrawer.GetFriendlyTypeName(usage.ExpectedPayloadType)})";
+                        }
 
                         EditorGUILayout.LabelField(
-                            $"{issue}: {usage.Component.gameObject.name} -> {usage.Component.GetType().Name}.{usage.FieldName} ({EventKeyDrawer.GetFriendlyTypeName(usage.ValueType)})");
+                            $"{issue}: {GetUsageContextName(usage.Context)} -> {usage.Context.GetType().Name}.{usage.FieldName}");
 
                         if (GUILayout.Button("🎯 Seç", GUILayout.Width(65f)))
                         {
-                            Selection.activeGameObject = usage.Component.gameObject;
-                            EditorGUIUtility.PingObject(usage.Component.gameObject);
+                            SelectUsageContext(usage.Context);
                         }
                     }
                 }
             }
 
             EditorGUILayout.Space(8f);
-            EditorGUILayout.LabelField($"👻 Sahnede Kullanılmayan Eventler ({_orphanChannelPaths.Count})", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField($"👻 Kullanılmayan Eventler ({_orphanChannelPaths.Count})", EditorStyles.boldLabel);
             if (_orphanChannelPaths.Count == 0)
             {
-                EditorGUILayout.LabelField("Grup SO'larındaki tüm eventler aktif sahnede kullanılıyor.", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("Grup SO'larındaki tüm eventler taranan kapsamda kullanılıyor.", EditorStyles.miniLabel);
             }
             else
             {
@@ -521,6 +599,16 @@ namespace Yasin.EventBoard.Editor
                 {
                     EditorGUILayout.LabelField($"• {_orphanChannelPaths[i]}", EditorStyles.miniLabel);
                 }
+            }
+        }
+
+        private void DrawAssetScanToggle()
+        {
+            bool newInclude = EditorGUILayout.ToggleLeft("📦 Proje Prefab & ScriptableObject'lerini de Tara", _includeProjectAssets);
+            if (newInclude != _includeProjectAssets)
+            {
+                _includeProjectAssets = newInclude;
+                RefreshSceneMatrix();
             }
         }
 
@@ -532,45 +620,26 @@ namespace Yasin.EventBoard.Editor
 
             IReadOnlyList<EventBoardGroup> groups = EventBoardGroup.GetAllGroups(forceRefresh: true);
             HashSet<string> usedGuids = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<object> visited = new HashSet<object>();
 
+#if UNITY_2023_1_OR_NEWER
             MonoBehaviour[] behaviours = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-
+#else
+            MonoBehaviour[] behaviours = FindObjectsOfType<MonoBehaviour>(true);
+#endif
             for (int i = 0; i < behaviours.Length; i++)
             {
                 MonoBehaviour mb = behaviours[i];
-                if (mb == null)
-                    continue;
-
-                Type type = mb.GetType();
-                FieldInfo[] fields = type.GetFields(flags);
-
-                for (int f = 0; f < fields.Length; f++)
+                if (mb != null)
                 {
-                    FieldInfo field = fields[f];
-                    Type fType = field.FieldType;
-
-                    if (typeof(IEventKey).IsAssignableFrom(fType))
-                    {
-                        if (field.GetValue(mb) is IEventKey keyVal)
-                        {
-                            RecordUsage(usedGuids, mb, field.Name, keyVal);
-                        }
-                    }
-                    else if (IsEventKeyCollectionType(fType))
-                    {
-                        if (field.GetValue(mb) is IList list)
-                        {
-                            for (int idx = 0; idx < list.Count; idx++)
-                            {
-                                if (list[idx] is IEventKey keyElem)
-                                {
-                                    RecordUsage(usedGuids, mb, $"{field.Name}[{idx}]", keyElem);
-                                }
-                            }
-                        }
-                    }
+                    visited.Clear();
+                    InspectObjectFields(mb, mb, mb.GetType(), string.Empty, usedGuids, visited, 0);
                 }
+            }
+
+            if (_includeProjectAssets)
+            {
+                ScanProjectAssets(usedGuids, visited);
             }
 
             if (groups != null)
@@ -593,20 +662,146 @@ namespace Yasin.EventBoard.Editor
             }
         }
 
+        private void ScanProjectAssets(HashSet<string> usedGuids, HashSet<object> visited)
+        {
+            string[] prefabGuids = AssetDatabase.FindAssets("t:Prefab", new[] { "Assets" });
+            if (prefabGuids != null)
+            {
+                for (int i = 0; i < prefabGuids.Length; i++)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(prefabGuids[i]);
+                    GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (prefab == null)
+                        continue;
+
+                    MonoBehaviour[] prefabBehaviours = prefab.GetComponentsInChildren<MonoBehaviour>(true);
+                    for (int b = 0; b < prefabBehaviours.Length; b++)
+                    {
+                        MonoBehaviour mb = prefabBehaviours[b];
+                        if (mb != null)
+                        {
+                            visited.Clear();
+                            InspectObjectFields(mb, mb, mb.GetType(), string.Empty, usedGuids, visited, 0);
+                        }
+                    }
+                }
+            }
+
+            string[] soGuids = AssetDatabase.FindAssets("t:ScriptableObject", new[] { "Assets" });
+            if (soGuids != null)
+            {
+                for (int i = 0; i < soGuids.Length; i++)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(soGuids[i]);
+                    ScriptableObject so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+                    if (so == null || so is EventBoardGroup || so is EventBoardRegistry)
+                        continue;
+
+                    visited.Clear();
+                    InspectObjectFields(so, so, so.GetType(), string.Empty, usedGuids, visited, 0);
+                }
+            }
+        }
+
+        private void InspectObjectFields(
+            UnityEngine.Object context,
+            object instance,
+            Type rootType,
+            string prefix,
+            HashSet<string> usedGuids,
+            HashSet<object> visited,
+            int depth)
+        {
+            if (instance == null || rootType == null)
+                return;
+
+            if (!rootType.IsValueType && !visited.Add(instance))
+                return;
+
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            for (Type t = rootType;
+                 t != null && t != typeof(MonoBehaviour) && t != typeof(ScriptableObject) && t != typeof(UnityEngine.Object) && t != typeof(object);
+                 t = t.BaseType)
+            {
+                FieldInfo[] fields = t.GetFields(flags);
+                for (int f = 0; f < fields.Length; f++)
+                {
+                    FieldInfo field = fields[f];
+                    Type fType = field.FieldType;
+                    string fieldPath = string.IsNullOrEmpty(prefix) ? field.Name : $"{prefix}.{field.Name}";
+
+                    if (typeof(IEventKey).IsAssignableFrom(fType))
+                    {
+                        if (field.GetValue(instance) is IEventKey keyVal)
+                        {
+                            RecordUsage(usedGuids, context, fieldPath, keyVal);
+                        }
+                    }
+                    else if (IsEventKeyCollectionType(fType))
+                    {
+                        if (field.GetValue(instance) is IList list)
+                        {
+                            for (int idx = 0; idx < list.Count; idx++)
+                            {
+                                if (list[idx] is IEventKey keyElem)
+                                {
+                                    RecordUsage(usedGuids, context, $"{fieldPath}[{idx}]", keyElem);
+                                }
+                            }
+                        }
+                    }
+                    else if (depth < 4)
+                    {
+                        Type elemType = GetCollectionElementType(fType);
+                        if (elemType != null)
+                        {
+                            if (IsCustomSerializableContainer(elemType) && field.GetValue(instance) is IList list)
+                            {
+                                for (int idx = 0; idx < list.Count; idx++)
+                                {
+                                    object elem = list[idx];
+                                    if (elem != null)
+                                    {
+                                        InspectObjectFields(context, elem, elem.GetType(), $"{fieldPath}[{idx}]", usedGuids, visited, depth + 1);
+                                    }
+                                }
+                            }
+                        }
+                        else if (IsCustomSerializableContainer(fType))
+                        {
+                            object nested = field.GetValue(instance);
+                            if (nested != null)
+                            {
+                                InspectObjectFields(context, nested, nested.GetType(), fieldPath, usedGuids, visited, depth + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private void RecordUsage(
             HashSet<string> usedGuids,
-            MonoBehaviour mb,
+            UnityEngine.Object context,
             string fieldName,
             IEventKey keyVal)
         {
             bool isAssigned = keyVal.IsAssigned;
             bool isMissing = false;
+            bool isTypeMismatch = false;
+            Type expectedPayloadType = null;
 
             if (isAssigned)
             {
                 if (EventBoardGroup.TryFindByGuid(keyVal.Guid, out _, out var entry))
                 {
                     usedGuids.Add(entry.guid);
+                    expectedPayloadType = entry.PayloadType;
+                    if (keyVal.ValueType != null && expectedPayloadType != null && expectedPayloadType != keyVal.ValueType)
+                    {
+                        isTypeMismatch = true;
+                    }
                 }
                 else
                 {
@@ -616,34 +811,76 @@ namespace Yasin.EventBoard.Editor
 
             _sceneUsages.Add(new SceneKeyUsage
             {
-                Component = mb,
+                Context = context,
                 FieldName = fieldName,
                 Guid = keyVal.Guid,
                 Path = keyVal.CachedPath,
                 ValueType = keyVal.ValueType,
+                ExpectedPayloadType = expectedPayloadType,
                 IsAssigned = isAssigned,
-                IsMissingInGroups = isMissing
+                IsMissingInGroups = isMissing,
+                IsTypeMismatch = isTypeMismatch
             });
+        }
+
+        private static string GetUsageContextName(UnityEngine.Object context)
+        {
+            if (context == null)
+                return "(Null)";
+            return context is MonoBehaviour mb && mb.gameObject != null ? mb.gameObject.name : context.name;
+        }
+
+        private static void SelectUsageContext(UnityEngine.Object context)
+        {
+            if (context == null)
+                return;
+
+            UnityEngine.Object target = context is MonoBehaviour mb && mb.gameObject != null
+                ? (UnityEngine.Object)mb.gameObject
+                : context;
+            Selection.activeObject = target;
+            EditorGUIUtility.PingObject(target);
         }
 
         private static bool IsEventKeyCollectionType(Type fieldType)
         {
+            Type elemType = GetCollectionElementType(fieldType);
+            return elemType != null && typeof(IEventKey).IsAssignableFrom(elemType);
+        }
+
+        private static Type GetCollectionElementType(Type fieldType)
+        {
             if (fieldType == null)
-                return false;
+                return null;
 
             if (fieldType.IsArray)
-            {
-                Type elemType = fieldType.GetElementType();
-                return elemType != null && typeof(IEventKey).IsAssignableFrom(elemType);
-            }
+                return fieldType.GetElementType();
 
             if (fieldType.IsGenericType && fieldType.GetGenericTypeDefinition() == typeof(List<>))
+                return fieldType.GetGenericArguments()[0];
+
+            return null;
+        }
+
+        private static bool IsCustomSerializableContainer(Type type)
+        {
+            if (type == null || type.IsPrimitive || type.IsEnum || type.IsPointer)
+                return false;
+
+            if (type == typeof(string) || type == typeof(decimal))
+                return false;
+
+            if (typeof(UnityEngine.Object).IsAssignableFrom(type) || typeof(Delegate).IsAssignableFrom(type))
+                return false;
+
+            if (type.Namespace != null &&
+                (type.Namespace.StartsWith("System", StringComparison.Ordinal) ||
+                 type.Namespace.StartsWith("UnityEngine", StringComparison.Ordinal)))
             {
-                Type elemType = fieldType.GetGenericArguments()[0];
-                return elemType != null && typeof(IEventKey).IsAssignableFrom(elemType);
+                return false;
             }
 
-            return false;
+            return type.IsValueType || type.IsDefined(typeof(SerializableAttribute), false);
         }
 
         private void DrawBenchmarkTab()

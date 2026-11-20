@@ -17,6 +17,7 @@ namespace Yasin.EventBoard.Editor
             public Type ConcretePayloadClass;
             public Type ValueType;
             public string DisplayName;
+            public bool SupportsSaveable;
         }
 
         private SerializedProperty _eventsProp;
@@ -57,7 +58,8 @@ namespace Yasin.EventBoard.Editor
                         {
                             ConcretePayloadClass = t,
                             ValueType = instance.PayloadType,
-                            DisplayName = instance.DisplayName
+                            DisplayName = instance.DisplayName,
+                            SupportsSaveable = instance.SupportsSaveable
                         });
                     }
                 }
@@ -98,12 +100,16 @@ namespace Yasin.EventBoard.Editor
             EditorGUILayout.Space(6f);
             DrawSearchAndFilterBar();
             EditorGUILayout.Space(6f);
-            DrawEventList(group);
+            int removedRuntimeId = DrawEventList();
 
             if (serializedObject.ApplyModifiedProperties())
             {
                 group.SanitizeEntries();
                 group.RebuildLookups();
+                if (removedRuntimeId != 0)
+                {
+                    EventBoard.RemoveChannelById(removedRuntimeId);
+                }
                 EventBoard.HydrateFromGroup(group);
             }
         }
@@ -153,18 +159,26 @@ namespace Yasin.EventBoard.Editor
                     _newEventTypeIndex = EditorGUILayout.Popup(_newEventTypeIndex, _payloadDisplayNames, GUILayout.Width(105f));
                 }
 
+                int clampedIdx = Mathf.Clamp(_newEventTypeIndex, 0, _payloadTypes.Count - 1);
+                bool canSaveable = _payloadTypes.Count > 0 && _payloadTypes[clampedIdx].SupportsSaveable;
+
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    _newEventPersistent = EditorGUILayout.ToggleLeft("💾 Kalıcı", _newEventPersistent, GUILayout.Width(85f));
+                    using (new EditorGUI.DisabledScope(!canSaveable))
+                    {
+                        _newEventPersistent = canSaveable && EditorGUILayout.ToggleLeft("💾 Kalıcı", _newEventPersistent, GUILayout.Width(85f));
+                    }
                     GUILayout.FlexibleSpace();
 
                     GUI.backgroundColor = new Color(0.35f, 0.88f, 0.48f);
                     if (GUILayout.Button("+ Ekle", GUILayout.Height(22f), GUILayout.Width(85f)))
                     {
+                        serializedObject.ApplyModifiedProperties();
                         Undo.RecordObject(group, "Add Event To Group SO");
-                        Type payloadClass = _payloadTypes[Mathf.Clamp(_newEventTypeIndex, 0, _payloadTypes.Count - 1)].ConcretePayloadClass;
+                        Type payloadClass = _payloadTypes[clampedIdx].ConcretePayloadClass;
                         EventPayloadDefinition payloadInstance = (EventPayloadDefinition)Activator.CreateInstance(payloadClass);
-                        group.AddEntry(_newEventName, payloadInstance, _newEventPersistent);
+                        bool saveable = _newEventPersistent && payloadInstance.SupportsSaveable;
+                        group.AddEntry(_newEventName, payloadInstance, saveable);
                         EditorUtility.SetDirty(group);
                         serializedObject.Update();
                     }
@@ -188,12 +202,12 @@ namespace Yasin.EventBoard.Editor
             }
         }
 
-        private void DrawEventList(EventBoardGroup group)
+        private int DrawEventList()
         {
             if (_eventsProp == null || _eventsProp.arraySize == 0)
             {
                 EditorGUILayout.HelpBox("Henüz event yok.", MessageType.Info);
-                return;
+                return 0;
             }
 
             Type requiredPayloadClass = _selectedTypeFilterIndex > 0 && _selectedTypeFilterIndex - 1 < _payloadTypes.Count
@@ -207,6 +221,7 @@ namespace Yasin.EventBoard.Editor
                 SerializedProperty entryProp = _eventsProp.GetArrayElementAtIndex(i);
                 SerializedProperty nameProp = entryProp.FindPropertyRelative("eventName");
                 SerializedProperty descProp = entryProp.FindPropertyRelative("description");
+                SerializedProperty payloadProp = entryProp.FindPropertyRelative("payload");
                 string evName = nameProp != null ? nameProp.stringValue : string.Empty;
                 string desc = descProp != null ? descProp.stringValue : string.Empty;
 
@@ -218,35 +233,48 @@ namespace Yasin.EventBoard.Editor
                         continue;
                 }
 
-                if (requiredPayloadClass != null && i < group.Events.Count && group.Events[i]?.payload != null)
+                if (requiredPayloadClass != null)
                 {
-                    if (group.Events[i].payload.GetType() != requiredPayloadClass)
+                    Type actualType = payloadProp != null ? payloadProp.managedReferenceValue?.GetType() : null;
+                    if (actualType != requiredPayloadClass)
                         continue;
                 }
 
-                if (DrawSingleEventEntry(group, i))
+                if (DrawSingleEventEntry(entryProp))
                 {
                     deleteIndex = i;
                 }
             }
 
+            int removedRuntimeId = 0;
             if (deleteIndex >= 0 && deleteIndex < _eventsProp.arraySize)
             {
+                SerializedProperty delEntry = _eventsProp.GetArrayElementAtIndex(deleteIndex);
+                SerializedProperty delGuidProp = delEntry.FindPropertyRelative("guid");
+                if (delGuidProp != null && !string.IsNullOrEmpty(delGuidProp.stringValue))
+                {
+                    removedRuntimeId = EventBoard.ComputeId(delGuidProp.stringValue);
+                }
+
                 _eventsProp.DeleteArrayElementAtIndex(deleteIndex);
             }
+
+            return removedRuntimeId;
         }
 
-        private bool DrawSingleEventEntry(EventBoardGroup group, int index)
+        private bool DrawSingleEventEntry(SerializedProperty entryProp)
         {
-            SerializedProperty entryProp = _eventsProp.GetArrayElementAtIndex(index);
             SerializedProperty guidProp = entryProp.FindPropertyRelative("guid");
             SerializedProperty nameProp = entryProp.FindPropertyRelative("eventName");
             SerializedProperty payloadProp = entryProp.FindPropertyRelative("payload");
             SerializedProperty persistentProp = entryProp.FindPropertyRelative("isSaveable");
             SerializedProperty descProp = entryProp.FindPropertyRelative("description");
 
-            EventBoardGroup.EventEntry rawEntry = index < group.Events.Count ? group.Events[index] : null;
-            Type currentPayloadClass = rawEntry?.payload != null ? rawEntry.payload.GetType() : typeof(VoidPayload);
+            EventPayloadDefinition currentPayload = payloadProp != null
+                ? payloadProp.managedReferenceValue as EventPayloadDefinition
+                : null;
+            Type currentPayloadClass = currentPayload != null ? currentPayload.GetType() : typeof(VoidPayload);
+
             int currentTypeIdx = 0;
             for (int i = 0; i < _payloadTypes.Count; i++)
             {
@@ -265,19 +293,34 @@ namespace Yasin.EventBoard.Editor
                     EditorGUILayout.PropertyField(nameProp, GUIContent.none, GUILayout.MinWidth(140f));
 
                     int newTypeIdx = EditorGUILayout.Popup(currentTypeIdx, _payloadDisplayNames, GUILayout.Width(105f));
-                    if (newTypeIdx != currentTypeIdx && newTypeIdx >= 0 && newTypeIdx < _payloadTypes.Count)
+                    if (newTypeIdx != currentTypeIdx && newTypeIdx >= 0 && newTypeIdx < _payloadTypes.Count && payloadProp != null)
                     {
                         Type targetPayloadClass = _payloadTypes[newTypeIdx].ConcretePayloadClass;
-                        payloadProp.managedReferenceValue = Activator.CreateInstance(targetPayloadClass);
+                        EventPayloadDefinition newPayload = (EventPayloadDefinition)Activator.CreateInstance(targetPayloadClass);
+                        payloadProp.managedReferenceValue = newPayload;
+                        currentPayload = newPayload;
+                        if (!newPayload.SupportsSaveable)
+                        {
+                            persistentProp.boolValue = false;
+                        }
                     }
 
-                    bool isPers = persistentProp.boolValue;
-                    GUI.backgroundColor = isPers ? new Color(0.4f, 0.85f, 1f) : Color.white;
-                    if (GUILayout.Button(new GUIContent("💾", "Kaydedilebilir (Saveable)"), EditorStyles.miniButton, GUILayout.Width(28f)))
+                    bool supportsSaveable = currentPayload != null && currentPayload.SupportsSaveable;
+                    if (!supportsSaveable && persistentProp.boolValue)
                     {
-                        persistentProp.boolValue = !isPers;
+                        persistentProp.boolValue = false;
                     }
-                    GUI.backgroundColor = Color.white;
+
+                    using (new EditorGUI.DisabledScope(!supportsSaveable))
+                    {
+                        bool isPers = persistentProp.boolValue;
+                        GUI.backgroundColor = isPers ? new Color(0.4f, 0.85f, 1f) : Color.white;
+                        if (GUILayout.Button(new GUIContent("💾", supportsSaveable ? "Kaydedilebilir (Saveable)" : "Bu veri tipi JSON Save/Load desteklemiyor"), EditorStyles.miniButton, GUILayout.Width(28f)))
+                        {
+                            persistentProp.boolValue = !isPers;
+                        }
+                        GUI.backgroundColor = Color.white;
+                    }
 
                     GUI.backgroundColor = new Color(1f, 0.45f, 0.45f);
                     if (GUILayout.Button(new GUIContent("✕", $"Sil (GUID: {guidProp.stringValue})"), EditorStyles.miniButton, GUILayout.Width(24f)))
@@ -292,7 +335,7 @@ namespace Yasin.EventBoard.Editor
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     SerializedProperty defaultValProp = payloadProp != null ? payloadProp.FindPropertyRelative("defaultValue") : null;
-                    bool supportsDefault = rawEntry?.payload != null && rawEntry.payload.SupportsDefaultValue;
+                    bool supportsDefault = currentPayload != null && currentPayload.SupportsDefaultValue;
 
                     if (supportsDefault && defaultValProp != null)
                     {

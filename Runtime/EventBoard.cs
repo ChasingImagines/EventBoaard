@@ -56,10 +56,15 @@ namespace Yasin.EventBoard
         private static readonly Dictionary<int, string> _idToPath = new Dictionary<int, string>(64);
         private static readonly Dictionary<int, string> _idToGuid = new Dictionary<int, string>(64);
         private static readonly List<Action> _bankResetActions = new List<Action>(16);
+        private static EventBoardRegistry _registry;
+        private static readonly List<EventBoardGroup> _dynamicGroups = new List<EventBoardGroup>(4);
+        private static readonly List<EventBoardGroup> _registeredGroupsScratch = new List<EventBoardGroup>(16);
+        private static readonly HashSet<EventBoardGroup> _registeredGroupsSeen = new HashSet<EventBoardGroup>();
         private static bool _initialized;
         private static int _version = 1;
 
         internal static int Version => _version;
+        public static EventBoardRegistry Registry => _registry;
 
         internal static EventChannelSlot<T> GetOrCreateSlot<T>(int runtimeId, string fallbackPath = null)
         {
@@ -68,6 +73,19 @@ namespace Yasin.EventBoard
 
             EnsureInitialized();
             return ChannelBank<T>.GetOrCreate(runtimeId, fallbackPath);
+        }
+
+        internal static EventChannelSlot<T> TryGetExistingSlot<T>(int runtimeId)
+        {
+            if (runtimeId == 0)
+                return null;
+
+            return ChannelBank<T>.Slots.TryGetValue(runtimeId, out EventChannelSlot<T> slot) ? slot : null;
+        }
+
+        internal static void RemoveFromBankInternal<T>(int runtimeId)
+        {
+            ChannelBank<T>.Slots.Remove(runtimeId);
         }
 
         public static IReadOnlyCollection<IEventChannelDiagnostic> DiagnosticSlots
@@ -80,10 +98,95 @@ namespace Yasin.EventBoard
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void InitializeOnLoad()
+        private static void OnSubsystemRegistration()
         {
-            ResetAll();
+            ResetAll(clearDynamicGroups: true);
+            EventBoardGroup.ResetStaticState();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void OnBeforeSceneLoad()
+        {
             EnsureInitialized();
+        }
+
+        public static void SetRegistry(EventBoardRegistry registry)
+        {
+            _registry = registry;
+            if (registry != null && _initialized)
+            {
+                HydrateFromGroups(registry.Groups);
+            }
+        }
+
+        /// <summary>
+        /// DLC veya Addressables ile çalışma zamanında yüklenen ekstra bir EventBoardGroup SO'sunu sisteme kaydeder.
+        /// </summary>
+        public static void RegisterGroup(EventBoardGroup group)
+        {
+            if (group == null)
+                return;
+
+            if (!_dynamicGroups.Contains(group))
+            {
+                _dynamicGroups.Add(group);
+            }
+
+            HydrateFromGroup(group);
+        }
+
+        /// <summary>
+        /// Çalışma zamanında dinamik kaydedilen bir EventBoardGroup SO'sunu kaldırır.
+        /// </summary>
+        public static void UnregisterGroup(EventBoardGroup group, bool removeChannels = false)
+        {
+            if (group == null)
+                return;
+
+            _dynamicGroups.Remove(group);
+
+            if (removeChannels && group.Events != null)
+            {
+                for (int i = 0; i < group.Events.Count; i++)
+                {
+                    EventBoardGroup.EventEntry entry = group.Events[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.guid))
+                    {
+                        RemoveChannelById(entry.RuntimeId);
+                    }
+                }
+            }
+        }
+
+        public static IReadOnlyList<EventBoardGroup> GetRegisteredGroups()
+        {
+            _registeredGroupsScratch.Clear();
+            _registeredGroupsSeen.Clear();
+
+            if (_registry != null && _registry.Groups != null)
+            {
+                IReadOnlyList<EventBoardGroup> regGroups = _registry.Groups;
+                for (int i = 0; i < regGroups.Count; i++)
+                {
+                    EventBoardGroup g = regGroups[i];
+                    if (g != null && _registeredGroupsSeen.Add(g))
+                    {
+                        _registeredGroupsScratch.Add(g);
+                    }
+                }
+            }
+
+            for (int i = 0; i < _dynamicGroups.Count; i++)
+            {
+                EventBoardGroup g = _dynamicGroups[i];
+                if (g != null && _registeredGroupsSeen.Add(g))
+                {
+                    _registeredGroupsScratch.Add(g);
+                }
+            }
+
+            _registeredGroupsSeen.Clear();
+            return _registeredGroupsScratch;
         }
 
         public static void EnsureInitialized()
@@ -92,12 +195,63 @@ namespace Yasin.EventBoard
                 return;
 
             _initialized = true;
-            IReadOnlyList<EventBoardGroup> groups = EventBoardGroup.GetAllGroups();
-            if (groups != null && groups.Count > 0)
+
+#if UNITY_EDITOR
+            if (_registry == null)
             {
-                HydrateFromGroups(groups);
+                _registry = FindRegistryInEditor();
+            }
+#endif
+
+            if (_registry != null)
+            {
+                HydrateFromGroups(_registry.Groups);
+            }
+#if UNITY_EDITOR
+            else
+            {
+                IReadOnlyList<EventBoardGroup> groups = EventBoardGroup.GetAllGroups();
+                if (groups != null && groups.Count > 0)
+                {
+                    HydrateFromGroups(groups);
+                }
+            }
+#endif
+
+            if (_dynamicGroups.Count > 0)
+            {
+                HydrateFromGroups(_dynamicGroups);
             }
         }
+
+#if UNITY_EDITOR
+        private static EventBoardRegistry FindRegistryInEditor()
+        {
+            UnityEngine.Object[] preloaded = UnityEditor.PlayerSettings.GetPreloadedAssets();
+            if (preloaded != null)
+            {
+                for (int i = 0; i < preloaded.Length; i++)
+                {
+                    if (preloaded[i] is EventBoardRegistry reg && reg != null)
+                        return reg;
+                }
+            }
+
+            string[] guids = UnityEditor.AssetDatabase.FindAssets("t:EventBoardRegistry");
+            if (guids != null)
+            {
+                for (int i = 0; i < guids.Length; i++)
+                {
+                    string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]);
+                    EventBoardRegistry reg = UnityEditor.AssetDatabase.LoadAssetAtPath<EventBoardRegistry>(path);
+                    if (reg != null)
+                        return reg;
+                }
+            }
+
+            return null;
+        }
+#endif
 
         /// <summary>
         /// Birden fazla EventBoardGroup SO içerisindeki tüm kanalların varsayılan (DefaultValue) ve kaydedilebilirlik (IsSaveable)
@@ -108,7 +262,6 @@ namespace Yasin.EventBoard
             if (groups == null)
                 return;
 
-            _initialized = true;
             for (int i = 0; i < groups.Count; i++)
             {
                 HydrateFromGroup(groups[i]);
@@ -123,7 +276,6 @@ namespace Yasin.EventBoard
             if (group == null)
                 return;
 
-            _initialized = true;
             IReadOnlyList<EventBoardGroup.EventEntry> entries = group.Events;
             if (entries == null)
                 return;
@@ -136,6 +288,14 @@ namespace Yasin.EventBoard
 
                 int runtimeId = ComputeId(entry.guid);
                 string fullPath = group.GetFullChannelName(entry);
+
+                if (_idToGuid.TryGetValue(runtimeId, out string existingGuid) &&
+                    !string.IsNullOrEmpty(existingGuid) &&
+                    !string.Equals(existingGuid, entry.guid, StringComparison.Ordinal))
+                {
+                    Debug.LogError($"[EventBoard] 32-bit FNV-1a Hash çakışması tespit edildi! ID: {runtimeId} -> Mevcut GUID: '{existingGuid}', Yeni GUID: '{entry.guid}' ({fullPath}). Lütfen çakışan olayı yeniden oluşturun.", group);
+                    continue;
+                }
 
                 _idToGuid[runtimeId] = entry.guid;
                 _idToPath[runtimeId] = fullPath;
@@ -157,6 +317,18 @@ namespace Yasin.EventBoard
         {
             if (runtimeId == 0)
                 return;
+
+            if (_diagnosticSlots.TryGetValue(runtimeId, out IEventChannelDiagnostic existing) &&
+                existing != null &&
+                existing.PayloadType != typeof(T))
+            {
+                if (existing is IEventChannelInternal internalExisting)
+                {
+                    internalExisting.RemoveSelfFromBank();
+                }
+                _diagnosticSlots.Remove(runtimeId);
+                _version++;
+            }
 
             _idToGuid[runtimeId] = guid ?? string.Empty;
             _idToPath[runtimeId] = eventPath ?? string.Empty;
@@ -301,7 +473,7 @@ namespace Yasin.EventBoard
             EnsureInitialized();
             if (ChannelBank<T>.Slots.TryGetValue(runtimeId, out EventChannelSlot<T> slot))
             {
-                return slot.HasValue || slot.HasDefaultValue;
+                return slot.HasValue;
             }
 
             return false;
@@ -310,20 +482,73 @@ namespace Yasin.EventBoard
         /// <summary>
         /// Kanala abone olur. <paramref name="replayLatest"/> true ise mevcut Blackboard değeri anında iletilir.
         /// </summary>
-        public static void Subscribe<T>(int runtimeId, Action<T> listener, bool replayLatest = false, string fallbackPath = null)
+        public static EventSubscription Subscribe<T>(int runtimeId, Action<T> listener, bool replayLatest = false, string fallbackPath = null)
         {
             if (runtimeId == 0 || listener == null)
-                return;
+                return EventSubscription.Empty;
 
             EnsureInitialized();
             EventChannelSlot<T> slot = ChannelBank<T>.GetOrCreate(runtimeId, fallbackPath);
-            slot.Subscribe(listener, replayLatest);
+            return slot.Subscribe(listener, null, hasExplicitOwner: false, replayLatest);
+        }
+
+        /// <summary>
+        /// Kanala açık bir sahip (owner) nesnesiyle abone olur; lambda/closure aboneliklerinde dahi sahip yok edildiğinde otomatik temizlenir.
+        /// </summary>
+        public static EventSubscription Subscribe<T>(int runtimeId, UnityEngine.Object owner, Action<T> listener, bool replayLatest = false, string fallbackPath = null)
+        {
+            if (runtimeId == 0 || listener == null || owner == null)
+                return EventSubscription.Empty;
+
+            EnsureInitialized();
+            EventChannelSlot<T> slot = ChannelBank<T>.GetOrCreate(runtimeId, fallbackPath);
+            return slot.Subscribe(listener, owner, hasExplicitOwner: true, replayLatest);
+        }
+
+        /// <summary>
+        /// Kanala parametresiz (closure tahsissiz) olarak abone olur.
+        /// </summary>
+        public static EventSubscription Subscribe<T>(int runtimeId, Action listener, bool replayLatest = false, string fallbackPath = null)
+        {
+            if (runtimeId == 0 || listener == null)
+                return EventSubscription.Empty;
+
+            EnsureInitialized();
+            EventChannelSlot<T> slot = ChannelBank<T>.GetOrCreate(runtimeId, fallbackPath);
+            return slot.Subscribe(listener, null, hasExplicitOwner: false, replayLatest);
+        }
+
+        /// <summary>
+        /// Kanala açık bir sahip (owner) nesnesiyle parametresiz olarak abone olur.
+        /// </summary>
+        public static EventSubscription Subscribe<T>(int runtimeId, UnityEngine.Object owner, Action listener, bool replayLatest = false, string fallbackPath = null)
+        {
+            if (runtimeId == 0 || listener == null || owner == null)
+                return EventSubscription.Empty;
+
+            EnsureInitialized();
+            EventChannelSlot<T> slot = ChannelBank<T>.GetOrCreate(runtimeId, fallbackPath);
+            return slot.Subscribe(listener, owner, hasExplicitOwner: true, replayLatest);
         }
 
         /// <summary>
         /// Kanal aboneliğinden çıkar.
         /// </summary>
         public static void Unsubscribe<T>(int runtimeId, Action<T> listener)
+        {
+            if (runtimeId == 0 || listener == null)
+                return;
+
+            if (ChannelBank<T>.Slots.TryGetValue(runtimeId, out EventChannelSlot<T> slot))
+            {
+                slot.Unsubscribe(listener);
+            }
+        }
+
+        /// <summary>
+        /// Parametresiz kanal aboneliğinden çıkar.
+        /// </summary>
+        public static void Unsubscribe<T>(int runtimeId, Action listener)
         {
             if (runtimeId == 0 || listener == null)
                 return;
@@ -353,15 +578,37 @@ namespace Yasin.EventBoard
             if (runtimeId == 0)
                 return;
 
-            ChannelBank<T>.Slots.Remove(runtimeId);
-            _diagnosticSlots.Remove(runtimeId);
-            _idToPath.Remove(runtimeId);
-            _idToGuid.Remove(runtimeId);
-            _version++;
+            if (ChannelBank<T>.Slots.TryGetValue(runtimeId, out EventChannelSlot<T> slot))
+            {
+                ChannelBank<T>.Slots.Remove(runtimeId);
+                slot.ResetChannelCompletely();
+                _diagnosticSlots.Remove(runtimeId);
+                _idToPath.Remove(runtimeId);
+                _idToGuid.Remove(runtimeId);
+                _version++;
+            }
+        }
+
+        public static void RemoveChannelById(int runtimeId)
+        {
+            if (runtimeId == 0)
+                return;
+
+            if (_diagnosticSlots.TryGetValue(runtimeId, out IEventChannelDiagnostic slot))
+            {
+                if (slot is IEventChannelInternal internalSlot)
+                {
+                    internalSlot.RemoveSelfFromBank();
+                }
+                _diagnosticSlots.Remove(runtimeId);
+                _idToPath.Remove(runtimeId);
+                _idToGuid.Remove(runtimeId);
+                _version++;
+            }
         }
 
         /// <summary>
-        /// Sahne geçişlerinde kalıcı olmayan (IsPersistent == false) tüm kanalların Blackboard değerlerini temizler.
+        /// Sahne geçişlerinde kalıcı olmayan (IsSaveable == false) tüm kanalların Blackboard değerlerini temizler.
         /// </summary>
         public static void ClearNonPersistent(bool restoreDefaults = true)
         {
@@ -376,10 +623,26 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
+        /// Abonelikleri koruyarak tüm kanalların çalışma zamanı Blackboard değerlerini sıfırlar.
+        /// </summary>
+        public static void ClearAllValues(bool restoreDefaults = true)
+        {
+            foreach (var kvp in _diagnosticSlots)
+            {
+                kvp.Value?.ClearState(restoreDefaults);
+            }
+        }
+
+        /// <summary>
         /// Tüm abonelikleri ve geçici durumları sıfırlar (Oyun başlangıcı ve testler için).
         /// </summary>
-        public static void ResetAll()
+        public static void ResetAll(bool clearDynamicGroups = false)
         {
+            foreach (var kvp in _diagnosticSlots)
+            {
+                kvp.Value?.ResetChannelCompletely();
+            }
+
             for (int i = 0; i < _bankResetActions.Count; i++)
             {
                 _bankResetActions[i]?.Invoke();
@@ -388,6 +651,10 @@ namespace Yasin.EventBoard
             _diagnosticSlots.Clear();
             _idToPath.Clear();
             _idToGuid.Clear();
+            if (clearDynamicGroups)
+            {
+                _dynamicGroups.Clear();
+            }
             _initialized = false;
             _version++;
         }
@@ -404,6 +671,7 @@ namespace Yasin.EventBoard
                 return path;
             return fallback;
         }
+
         [Serializable]
         public sealed class BlackboardSnapshot
         {
@@ -454,7 +722,8 @@ namespace Yasin.EventBoard
         /// </summary>
         /// <param name="json">BlackboardSnapshot JSON string.</param>
         /// <param name="notifyListeners">Whether to trigger callbacks for restored values.</param>
-        public static bool ImportStateJson(string json, bool notifyListeners = false)
+        /// <param name="resetMissingToDefault">Whether missing or invalid saveable channels should restore their default value.</param>
+        public static bool ImportStateJson(string json, bool notifyListeners = false, bool resetMissingToDefault = true)
         {
             if (string.IsNullOrWhiteSpace(json))
                 return false;
@@ -494,9 +763,15 @@ namespace Yasin.EventBoard
                         entryJson = pj;
                     }
 
+                    bool restored = false;
                     if (entryJson != null)
                     {
-                        slot.TryImportValueJson(entryJson, notifyListeners);
+                        restored = slot.TryImportValueJson(entryJson, notifyListeners);
+                    }
+
+                    if (!restored && resetMissingToDefault)
+                    {
+                        slot.RestoreDefaultState(notifyListeners);
                     }
                 }
                 return true;

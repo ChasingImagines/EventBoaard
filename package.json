@@ -1,6 +1,6 @@
 {
   "name": "com.yasin.eventboard",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "displayName": "EventBoard - ScriptableObject Event System",
   "description": "Decoupled, strongly-typed and inspector-friendly event architecture for Unity based on ScriptableObject groups and event keys.",
   "unity": "2021.3",

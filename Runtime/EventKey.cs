@@ -66,6 +66,18 @@ namespace Yasin.EventBoard
             return _cachedSlot;
         }
 
+        private EventChannelSlot<T> ResolveExistingSlot()
+        {
+            if (_cachedSlot != null && _cachedVersion == EventBoard.Version)
+                return _cachedSlot;
+
+            int id = Id;
+            if (id == 0)
+                return null;
+
+            return EventBoard.TryGetExistingSlot<T>(id);
+        }
+
         /// <summary>
         /// Blackboard'da bu kanal için kayıtlı son değeri (veya Grup SO içindeki DefaultValue'yu) sıfır GC ve sıfır Dictionary araması ile döndürür.
         /// </summary>
@@ -86,19 +98,19 @@ namespace Yasin.EventBoard
             get
             {
                 EventChannelSlot<T> slot = ResolveSlot();
-                return slot != null && (slot.HasValue || slot.HasDefaultValue);
+                return slot != null && slot.HasValue;
             }
         }
 
-        /// <summary>
-        /// Değeri Blackboard'a yazar ve bu kanalı dinleyen tüm abonelere sıfır çöp (Zero-GC) ile yayınlar.
-        /// </summary>
         /// <summary>
         /// Fires this event channel and notifies all active subscribers with the payload.
         /// Alias for Publish.
         /// </summary>
         public void Raise(T payload) => Publish(payload);
 
+        /// <summary>
+        /// Değeri Blackboard'a yazar ve bu kanalı dinleyen tüm abonelere sıfır çöp (Zero-GC) ile yayınlar.
+        /// </summary>
         public void Publish(T payload)
         {
             EventChannelSlot<T> slot = ResolveSlot();
@@ -177,16 +189,49 @@ namespace Yasin.EventBoard
         /// Kanala abone olur. <paramref name="replayLatest"/> true ise, kanalda halihazırda bir Blackboard
         /// değeri varsa abone olur olmaz anında bir kez tetiklenir (Late-Join / UI senkronizasyonu için idealdir).
         /// </summary>
-        public void Subscribe(Action<T> listener, bool replayLatest = false)
+        public EventSubscription Subscribe(Action<T> listener, bool replayLatest = false)
         {
-            if (!IsAssigned)
-                return;
+            if (!IsAssigned || listener == null)
+                return EventSubscription.Empty;
 
             EventChannelSlot<T> slot = ResolveSlot();
-            if (slot == null)
-                return;
+            return slot != null ? slot.Subscribe(listener, null, hasExplicitOwner: false, replayLatest) : EventSubscription.Empty;
+        }
 
-            slot.Subscribe(listener, replayLatest);
+        /// <summary>
+        /// Kanala açık bir sahip (owner) nesnesiyle abone olur; lambda/closure kullanılsa dahi sahip yok edildiğinde otomatik temizlenir.
+        /// </summary>
+        public EventSubscription Subscribe(UnityEngine.Object owner, Action<T> listener, bool replayLatest = false)
+        {
+            if (!IsAssigned || listener == null || owner == null)
+                return EventSubscription.Empty;
+
+            EventChannelSlot<T> slot = ResolveSlot();
+            return slot != null ? slot.Subscribe(listener, owner, hasExplicitOwner: true, replayLatest) : EventSubscription.Empty;
+        }
+
+        /// <summary>
+        /// Kanala parametresiz (closure tahsisi olmadan) abone olur.
+        /// </summary>
+        public EventSubscription Subscribe(Action listener, bool replayLatest = false)
+        {
+            if (!IsAssigned || listener == null)
+                return EventSubscription.Empty;
+
+            EventChannelSlot<T> slot = ResolveSlot();
+            return slot != null ? slot.Subscribe(listener, null, hasExplicitOwner: false, replayLatest) : EventSubscription.Empty;
+        }
+
+        /// <summary>
+        /// Kanala açık bir sahip (owner) nesnesiyle parametresiz olarak abone olur.
+        /// </summary>
+        public EventSubscription Subscribe(UnityEngine.Object owner, Action listener, bool replayLatest = false)
+        {
+            if (!IsAssigned || listener == null || owner == null)
+                return EventSubscription.Empty;
+
+            EventChannelSlot<T> slot = ResolveSlot();
+            return slot != null ? slot.Subscribe(listener, owner, hasExplicitOwner: true, replayLatest) : EventSubscription.Empty;
         }
 
         /// <summary>
@@ -197,11 +242,18 @@ namespace Yasin.EventBoard
             if (!IsAssigned || listener == null)
                 return;
 
-            EventChannelSlot<T> slot = ResolveSlot();
-            if (slot == null)
+            ResolveExistingSlot()?.Unsubscribe(listener);
+        }
+
+        /// <summary>
+        /// Parametresiz kanal aboneliğinden çıkar.
+        /// </summary>
+        public void Unsubscribe(Action listener)
+        {
+            if (!IsAssigned || listener == null)
                 return;
 
-            slot.Unsubscribe(listener);
+            ResolveExistingSlot()?.Unsubscribe(listener);
         }
 
         /// <summary>

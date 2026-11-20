@@ -10,13 +10,15 @@ Klasik Unity projelerinde sistemler büyüdükçe sınıflar birbirine sıkı s�
 - UI scripti Oyuncuya, Oyuncu Görev Yöneticisine, Düşman ise UI'a referans verir.
 - Sahne değiştiğinde veya bir nesne silindiğinde `NullReferenceException` ve `MissingReference` hataları başlar.
 
-**EventBoard bunu tamamen çözer:**
+**EventBoard v2.0 bunu tamamen çözer:**
 1. **Sıfır Referans Bağı (Decoupled):** Oyuncu ve UI birbirini tanımaz; ikisi de ortak panoya (EventBoard) bakar.
-2. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızada saklar. Geç açılan bir UI menüsü, "Skor kaçtı?" diye sormadan son değeri anında okur.
-3. **Tertemiz Yaşam Döngüsü (Fresh State):** Çalışma anındaki tüm değişkenler C# statik belleğinde yaşar; ScriptableObject dosyasına yazılmaz. Oyun durduğunda veriler uçar, oyun yeniden açıldığında her şey tertemiz (varsayılan değerlerle) başlar.
-4. **İsteğe Bağlı Save/Load Entegrasyonu (`Export/Import`):** Sadece `Saveable (Kaydedilebilir)` işaretlediğiniz veriler tek satırla JSON snapshot olarak dışarı aktarılır ve geri yüklenir. Eksik/hatalı verilerde sistem çökmez, varsayılan değerleri korur.
-5. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki ve Prefab'lardaki seçimleriniz asla bozulmaz.
-6. **Sıfır GC (Garbage Collection):** Generic delegeler ve runtime ID eşleştirmeleriyle bellek çöpü üretmez, drop/takılma yapmaz.
+2. **Sıfır Sahne Kurulumu & Özgür Klasör Yapısı:** `EventBoardGroup` ScriptableObject varlıklarınızı `Assets/` altında istediğiniz herhangi bir klasöre koyabilirsiniz. `Resources` klasörü veya sahneye yönetici objesi koyma zorunluluğu yoktur; `EventBoardRegistry` Unity'nin `PreloadedAssets` mekanizması ve `IPreprocessBuildWithReport` ile build öncesi otomatik senkronize edilir.
+3. **Hem Olay (Event) Hem Hafıza (Blackboard):** Klasik event sistemleri olayı fırlatır ve unutur. EventBoard ise son değeri hafızada saklar. Geç açılan bir UI menüsü, "Skor kaçtı?" diye sormadan son değeri anında okur.
+4. **Tertemiz Yaşam Döngüsü (Fresh State):** Çalışma anındaki tüm değişkenler C# statik belleğinde yaşar; ScriptableObject dosyasına yazılmaz. Oyun durduğunda veriler uçar, oyun yeniden açıldığında her şey tertemiz (varsayılan değerlerle) başlar.
+5. **Kopmayan Referanslar (GUID Koruması):** Kanal isimlerini değiştirseniz veya başka bir kategoriye taşısanız bile Inspector'daki, Prefab'lardaki ve ScriptableObject'lerdeki seçimleriniz asla bozulmaz. Çoğaltılan (`Ctrl+D`) grup dosyalarının GUID'leri otomatik yenilenir.
+6. **Sıfır GC & Re-Entrancy Güvenliği:** Generic delegeler ve runtime ID eşleştirmeleriyle bellek çöpü üretmez; iç içe (re-entrant) `Publish` çağrılarında hiçbir aboneyi atlamaz.
+7. **Sahip Takibi & `IDisposable` Abonelik:** `EventSubscription` token'ı (`Dispose()`), closure üretmeyen parametresiz `Subscribe(Action)` ve lambda/closure kullanımları için sahip takibi (`key.Subscribe(this, val => ...)`) sunar.
+8. **Kültürden Bağımsız Save/Load (`Export/Import`):** Sadece `Saveable (Kaydedilebilir)` işaretlediğiniz veriler kültür/dil farkından etkilenmeyen (`tr-TR`, `en-US` vb.) JSON snapshot olarak dışarı aktarılır ve geri yüklenir. Eksik/hatalı verilerde sistem varsayılan değerlere döner.
 
 ---
 
@@ -34,10 +36,10 @@ Klasik Unity projelerinde sistemler büyüdükçe sınıflar birbirine sıkı s�
 ## 🚀 Hızlı Başlangıç
 
 ### 1. Kanal / Grup Oluşturma (Tam Otomatik)
-- Üst menüden **Tools > EventBoard > Hub** penceresini açın.
+- Üst menüden **Tools > EventBoard > Hub** penceresini açın (veya `Assets/` altında istediğiniz herhangi bir klasörde sağ tıklayıp **Create > EventBoard > Event Group (SO)** seçin).
 - Grubunuza bir ad yazıp (örn: `PlayerEvents`) **"+ Oluştur"** butonuna basın.
-- Gerekli klasörler otomatik açılır ve ScriptableObject oluşturulur.
-- Inspector'da **"Add Event"** diyerek kanallarınızı tanımlayın (`Health`, `Score` vb.).
+- `EventBoardRegistry` projedeki tüm grupları otomatik olarak toplar ve `PlayerSettings > Preloaded Assets` listesine kaydeder — sahneye herhangi bir yönetici koymanız gerekmez.
+- Inspector'dan kanallarınızı tanımlayın (`Health`, `Score` vb.).
 
 ### 2. C# Kodunda Kullanım
 
@@ -75,23 +77,77 @@ public class HealthUI : MonoBehaviour
     [SerializeField] private EventKey<int> healthKey;
     [SerializeField] private Slider healthSlider;
 
+    private EventSubscription _subscription;
+
     private void OnEnable()
     {
         // replayLatest: true sayesinde UI açıldığı an son değeri hemen alır!
-        healthKey.Subscribe(UpdateHealthBar, replayLatest: true);
+        // Sahip (this) ve IDisposable token ile lambda kullanımlarında dahi sızıntı olmaz:
+        _subscription = healthKey.Subscribe(this, newHealth => healthSlider.value = newHealth, replayLatest: true);
     }
 
     private void OnDisable()
     {
-        healthKey.Unsubscribe(UpdateHealthBar);
+        _subscription.Dispose();
     }
+}
+```
 
-    private void UpdateHealthBar(int newHealth) => healthSlider.value = newHealth;
+### 4. Parametresiz Sinyaller ve Dinleyiciler
+
+`Subscribe(Action)` hem `EventKey<VoidSignal>` hem de herhangi bir `EventKey<T>` üzerinde closure tahsisi olmadan çalışır:
+
+```csharp
+[SerializeField] private EventKey<VoidSignal> onGameStarted;
+
+// Tetikle:
+onGameStarted.Raise();
+
+// Parametresiz dinle:
+onGameStarted.Subscribe(HandleGameStarted);
+```
+
+---
+
+## 🧩 Özel Veri Tipleri (Extensibility)
+
+Varsayılan tiplerin (`int`, `float`, `string`, `bool`, `Vector2`, `Vector3`, `Color`, `GameObject`, `Transform`) yanında kendi `struct` veya `class` tiplerinizi de ekleyebilirsiniz:
+
+```csharp
+using System;
+using Yasin.EventBoard;
+
+[Serializable]
+public struct QuestData
+{
+    public string questId;
+    public int targetCount;
+}
+
+[Serializable]
+public sealed class QuestDataPayload : EventPayloadDefinition<QuestData>
+{
+    public override string DisplayName => "QuestData";
 }
 ```
 
 ---
 
+## 💾 Opsiyonel Save / Load (JSON Snapshot)
+
+```csharp
+// Saveable işaretli kanalları dışa aktar (tr-TR / en-US fark etmeksizin güvenlidir):
+string json = EventBoard.ExportStateJson();
+
+// Geri yükle (eksik veya bozuk kanallar otomatik DefaultValue değerine döner):
+EventBoard.ImportStateJson(json, notifyListeners: true);
+```
+
+---
+
+## 🔍 Görsel Tanılama ve Denetim (Tools > EventBoard > Hub)
+
+**Tools > EventBoard > Hub** penceresi üzerinden canlı Blackboard değerlerini, aktif aboneleri, sahne/prefab/ScriptableObject bağlantı matrisini, statik denetim (Audit) raporlarını ve Zero-GC performans testlerini çalıştırabilirsiniz.
 
 ---
 

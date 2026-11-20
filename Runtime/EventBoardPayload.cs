@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// EventBoardDatabase içindeki her olayın veri tipini ve başlangıç (Blackboard Default) değerini
+    /// EventBoardGroup içindeki her olayın veri tipini ve başlangıç (Blackboard Default) değerini
     /// dış paket bağımlılığı olmadan ([SerializeReference] ile) tanımlayan soyut temel sınıf.
     /// </summary>
     [Serializable]
@@ -13,9 +13,10 @@ namespace Yasin.EventBoard
         public abstract Type PayloadType { get; }
         public abstract string DisplayName { get; }
         public abstract bool SupportsDefaultValue { get; }
+        public virtual bool SupportsSaveable => SupportsDefaultValue && !typeof(UnityEngine.Object).IsAssignableFrom(PayloadType);
 
         /// <summary>
-        /// Veritabanındaki varsayılan değeri ve kalıcılık bilgisini ilgili generic kanala (Zero-Boxing ile) yükler.
+        /// Grup SO içindeki varsayılan değeri ve kalıcılık bilgisini ilgili generic kanala (Zero-Boxing ile) yükler.
         /// </summary>
         public abstract void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isSaveable);
 

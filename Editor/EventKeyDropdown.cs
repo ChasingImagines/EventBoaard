@@ -51,7 +51,7 @@ namespace Yasin.EventBoard.Editor
 
             if (_groups == null || _groups.Count == 0)
             {
-                root.AddChild(new AdvancedDropdownItem("(Resources/EventBoard içinde Grup SO bulunamadı)"));
+                root.AddChild(new AdvancedDropdownItem("(Proje içinde EventBoardGroup SO bulunamadı — [+] ile oluşturun)"));
                 return root;
             }
 

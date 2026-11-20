@@ -14,15 +14,17 @@
 
 In complex game projects, systems easily become tightly coupled (Spaghetti Code):
 - UI scripts reference the Player, Player references the Quest Manager, Enemies reference UI...
-- When an object is destroyed or a scene unloads, `NullReferenceException` and `MissingReferenceException` occur.
+- When an object is destroyed or a scene unloads, `NullReferenceException` and `MissingReference` occur.
 
-**EventBoard provides clean decoupling:**
+**EventBoard v2.0 provides clean decoupling:**
 - **Zero-Coupling:** Systems never hold direct references to one another; both sides interact through shared ScriptableObject channels.
+- **Zero Scene Setup & Any Folder Structure:** Place your `EventBoardGroup` ScriptableObjects anywhere under `Assets/`. No `Resources` folder or scene manager GameObject is required—`EventBoardRegistry` is automatically synchronized via Unity's `PreloadedAssets` and verified before builds via `IPreprocessBuildWithReport`.
 - **Event Bus + Blackboard Combined:** Unlike typical event systems that fire and forget, EventBoard retains the latest value in memory. Late-spawned entities or newly opened UI menus immediately retrieve the current state without querying other managers.
 - **Fresh Runtime State:** Dynamic data lives in C# static memory—never dirtying ScriptableObject asset files on disk. When Play Mode exits, memory resets cleanly.
-- **Zero Allocation (Zero-GC):** Generic delegate dispatching with runtime integer hashing avoids garbage collection spikes.
-- **Unbreakable GUID Safety:** Channel references in scenes and prefabs remain valid even if you rename events or reorganize groups.
-- **Optional Snapshot (Save/Load):** Export only marked `Saveable` data to JSON with single-line calls, with automatic fallback to defaults for corrupt or missing keys.
+- **Zero Allocation & Re-Entrancy Safe:** Generic delegate dispatching with runtime integer hashing avoids garbage collection spikes and handles nested `Publish` calls safely.
+- **Unbreakable GUID Safety:** Channel references in scenes, prefabs, and ScriptableObjects remain valid even if you rename events or reorganize groups. Duplicated group assets automatically receive fresh GUIDs.
+- **Owner-Aware & Disposable Subscriptions:** Supports `IDisposable` `EventSubscription` tokens, parameterless `Subscribe(Action)` listeners without closures, and explicit owner tracking (`key.Subscribe(this, val => ...)`) for lambdas.
+- **Culture-Independent Save / Load (JSON Snapshot):** Export only marked `Saveable` data to JSON with single-line calls, safe across all locales (`tr-TR`, `en-US`, etc.), with automatic fallback to ScriptableObject defaults for missing or corrupt keys.
 
 ---
 
@@ -40,10 +42,10 @@ In complex game projects, systems easily become tightly coupled (Spaghetti Code)
 ## 🚀 Quick Start Guide
 
 ### 1. Create an Event/Blackboard Group
-- Open **Tools > EventBoard > Hub** from the top menu.
+- Open **Tools > EventBoard > Hub** from the top menu (or right-click in the Project window **Create > EventBoard > Event Group (SO)** anywhere under `Assets/`).
 - Enter a group name (e.g., `PlayerEvents`) and click **"+ Create"**.
-- The necessary folder structure (`Assets/Resources/EventBoard/`) and asset are generated automatically.
-- In the Inspector, click **"Add Event"** to define typed channels (e.g., `Health`, `Score`).
+- `EventBoardRegistry` automatically tracks your groups and registers itself in `PlayerSettings > Preloaded Assets`—no scene setup needed!
+- In the Inspector, add typed channels (e.g., `Health`, `Score`).
 
 ---
 
@@ -98,24 +100,27 @@ public class HealthUI : MonoBehaviour
     [SerializeField] private EventKey<int> healthKey;
     [SerializeField] private Slider healthSlider;
 
+    private EventSubscription _subscription;
+
     private void OnEnable()
     {
         // replayLatest: true triggers callback immediately with current Blackboard value upon subscribe!
-        healthKey.Subscribe(UpdateHealthBar, replayLatest: true);
+        // Optional owner tracking + IDisposable token keeps lambdas safe too:
+        _subscription = healthKey.Subscribe(this, newHealth => healthSlider.value = newHealth, replayLatest: true);
     }
 
     private void OnDisable()
     {
-        healthKey.Unsubscribe(UpdateHealthBar);
+        _subscription.Dispose();
     }
-
-    private void UpdateHealthBar(int newHealth) => healthSlider.value = newHealth;
 }
 ```
 
 ---
 
-### 4. Parameterless Signals (VoidSignal)
+### 4. Parameterless Signals & Listeners
+
+`Subscribe(Action)` works natively on `EventKey<VoidSignal>` as well as any `EventKey<T>` without allocating closures:
 
 ```csharp
 [SerializeField] private EventKey<VoidSignal> onGameStarted;
@@ -123,8 +128,8 @@ public class HealthUI : MonoBehaviour
 // Fire:
 onGameStarted.Raise();
 
-// Listen:
-onGameStarted.Subscribe(() => Debug.Log("Game Started!"));
+// Listen without arguments:
+onGameStarted.Subscribe(HandleGameStarted);
 ```
 
 ---
@@ -157,7 +162,7 @@ public sealed class QuestDataPayload : EventPayloadDefinition<QuestData>
 ## 💾 Optional Save / Load (JSON Snapshot)
 
 ```csharp
-// 1. Export channels marked as [Saveable] to JSON:
+// 1. Export channels marked as [Saveable] to culture-independent JSON:
 string json = EventBoard.ExportStateJson();
 
 // 2. Restore state (missing/invalid fields safely fallback to ScriptableObject defaults):
@@ -171,10 +176,7 @@ EventBoard.ImportStateJson(json, notifyListeners: true);
 Open the visual dashboard via:
 > **Tools > EventBoard > Hub**
 
-Inspect all active channels, live Blackboard state values, subscriber counts, and test-fire events directly from the editor during Play Mode.
-
----
-
+Inspect all active channels, live Blackboard state values, subscriber counts, scene/prefab/ScriptableObject dependency matrix, static audit checks, and test-fire events directly from the editor during Play Mode.
 
 ---
 
