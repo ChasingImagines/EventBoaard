@@ -49,6 +49,8 @@ namespace Yasin.EventBoard
         public bool HasDefaultValue { get; set; }
         public bool IsSaveable { get; set; }
 
+        public bool HasPublishedValue { get; private set; }
+
         public int PublishCount { get; private set; }
         public int LastPublishFrame { get; private set; } = -1;
         public float LastPublishTime { get; private set; }
@@ -74,7 +76,8 @@ namespace Yasin.EventBoard
             HasDefaultValue = hasDefault;
             IsSaveable = isSaveable;
 
-            if (!HasValue && HasDefaultValue)
+            // Runtime'da henüz bir değer atanmadıysa/yayınlanmadıysa, DefaultValue güncellendiğinde CurrentValue da senkronize olsun
+            if (!HasPublishedValue && HasDefaultValue)
             {
                 CurrentValue = DefaultValue;
                 HasValue = true;
@@ -85,9 +88,13 @@ namespace Yasin.EventBoard
         {
             CurrentValue = value;
             HasValue = true;
+            HasPublishedValue = true;
 
             if (notify)
             {
+                PublishCount++;
+                LastPublishFrame = Time.frameCount;
+                LastPublishTime = Time.unscaledTime;
                 Dispatch(value);
             }
         }
@@ -99,6 +106,7 @@ namespace Yasin.EventBoard
 
             CurrentValue = value;
             HasValue = true;
+            HasPublishedValue = true;
 
             if (notify)
             {
@@ -115,6 +123,7 @@ namespace Yasin.EventBoard
         {
             CurrentValue = payload;
             HasValue = true;
+            HasPublishedValue = true;
             PublishCount++;
             LastPublishFrame = Time.frameCount;
             LastPublishTime = Time.unscaledTime;
@@ -232,6 +241,7 @@ namespace Yasin.EventBoard
 
         public void ClearState(bool restoreDefault)
         {
+            HasPublishedValue = false;
             if (restoreDefault && HasDefaultValue)
             {
                 CurrentValue = DefaultValue;

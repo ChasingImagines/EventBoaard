@@ -357,6 +357,7 @@ namespace Yasin.EventBoard
             _diagnosticSlots.Remove(runtimeId);
             _idToPath.Remove(runtimeId);
             _idToGuid.Remove(runtimeId);
+            _version++;
         }
 
         /// <summary>
