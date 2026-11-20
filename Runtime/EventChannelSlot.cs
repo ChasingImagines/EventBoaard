@@ -520,12 +520,7 @@ namespace Yasin.EventBoard
             if (!SupportsSaveable || !TryGet(out T val))
                 return null;
 
-            bool isNull = IsReferenceType && val == null;
-            return JsonUtility.ToJson(new JsonValueBox
-            {
-                isNull = isNull,
-                value = isNull ? default : val
-            });
+            return EventBoard.Serializer.SerializeValue(val);
         }
 
         public bool TryImportValueJson(string json, bool notify)
@@ -533,24 +528,13 @@ namespace Yasin.EventBoard
             if (!SupportsSaveable || string.IsNullOrEmpty(json))
                 return false;
 
-            try
+            if (EventBoard.Serializer.TryDeserializeValue(json, out T imported))
             {
-                JsonValueBox box = JsonUtility.FromJson<JsonValueBox>(json);
-                T imported = (IsReferenceType && box.isNull) ? default : box.value;
                 SetState(imported, notify);
                 return true;
             }
-            catch
-            {
-                return false;
-            }
-        }
 
-        [Serializable]
-        private struct JsonValueBox
-        {
-            public bool isNull;
-            public T value;
+            return false;
         }
     }
 }

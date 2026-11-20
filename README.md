@@ -169,6 +169,10 @@ string json = EventBoard.ExportStateJson();
 EventBoard.ImportStateJson(json, notifyListeners: true);
 ```
 
+- **Zero-Dependency Default:** Uses `UnityJsonSerializer` (`JsonUtility`) when `Newtonsoft.Json` is not installed.
+- **Automatic `Newtonsoft.Json` Support:** If `com.unity.nuget.newtonsoft-json` is present in your project, the runtime assembly automatically defines `EVENTBOARD_NEWTONSOFT_JSON` via `versionDefines` and activates `NewtonsoftEventBoardSerializer`—supporting `Dictionary<K,V>`, `HashSet<T>`, `DateTime`, `Guid`, nullables, and C# properties, with built-in Unity math struct converters (`Vector2/3/4`, `Quaternion`, `Color/32`, `Rect`, `Bounds`) to avoid self-referencing loop errors and stay compatible with `JsonUtility` snapshots.
+- **Custom Serializer:** Assign any `IEventBoardSerializer` implementation to `EventBoard.Serializer` (or reset to `UnityJsonSerializer.Instance`).
+
 ---
 
 ## 🔍 Visual Inspector & Diagnostics

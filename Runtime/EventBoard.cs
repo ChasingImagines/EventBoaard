@@ -60,11 +60,32 @@ namespace Yasin.EventBoard
         private static readonly List<EventBoardGroup> _dynamicGroups = new List<EventBoardGroup>(4);
         private static readonly List<EventBoardGroup> _registeredGroupsScratch = new List<EventBoardGroup>(16);
         private static readonly HashSet<EventBoardGroup> _registeredGroupsSeen = new HashSet<EventBoardGroup>();
+        private static IEventBoardSerializer _serializer = CreateDefaultSerializer();
         private static bool _initialized;
         private static int _version = 1;
 
         internal static int Version => _version;
         public static EventBoardRegistry Registry => _registry;
+
+        /// <summary>
+        /// Active serializer used by ExportStateJson and ImportStateJson.
+        /// Automatically defaults to NewtonsoftEventBoardSerializer when com.unity.nuget.newtonsoft-json is installed,
+        /// or UnityJsonSerializer otherwise. Assign null to restore the default.
+        /// </summary>
+        public static IEventBoardSerializer Serializer
+        {
+            get => _serializer ?? (_serializer = CreateDefaultSerializer());
+            set => _serializer = value ?? CreateDefaultSerializer();
+        }
+
+        private static IEventBoardSerializer CreateDefaultSerializer()
+        {
+#if EVENTBOARD_NEWTONSOFT_JSON
+            return NewtonsoftEventBoardSerializer.Instance;
+#else
+            return UnityJsonSerializer.Instance;
+#endif
+        }
 
         internal static EventChannelSlot<T> GetOrCreateSlot<T>(int runtimeId, string fallbackPath = null)
         {

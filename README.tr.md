@@ -143,6 +143,10 @@ string json = EventBoard.ExportStateJson();
 EventBoard.ImportStateJson(json, notifyListeners: true);
 ```
 
+- **Sıfır Bağımlılık (Varsayılan):** `Newtonsoft.Json` yoksa `UnityJsonSerializer` (`JsonUtility`) üzerinden çalışır.
+- **Otomatik `Newtonsoft.Json` Desteği:** Projenizde `com.unity.nuget.newtonsoft-json` paketi varsa, runtime assembly `versionDefines` ile `EVENTBOARD_NEWTONSOFT_JSON` tanımlar ve `NewtonsoftEventBoardSerializer`'ı otomatik devreye alır. Böylece `Dictionary<K,V>`, `HashSet<T>`, `DateTime`, `Guid`, nullable tipler ve C# property'ler doğrudan kaydedilebilir; dahili Unity struct converter'ları (`Vector2/3/4`, `Quaternion`, `Color/32`, `Rect`, `Bounds`) sonsuz döngü hatalarını önler ve `JsonUtility` formatıyla uyumluluğu korur.
+- **Özel Serializer:** İsterseniz `EventBoard.Serializer` üzerinden kendi `IEventBoardSerializer` uygulamanızı (veya `UnityJsonSerializer.Instance`) atayabilirsiniz.
+
 ---
 
 ## 🔍 Görsel Tanılama ve Denetim (Tools > EventBoard > Hub)
