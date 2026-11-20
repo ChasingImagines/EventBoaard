@@ -60,9 +60,9 @@ namespace Yasin.EventBoard
 #endif
 
         /// <summary>
-        /// Klasördeki ve listedeki tüm EventBoardGroup SO'larını bünyesinde toplar ve EventBoard'a kaydeder.
+        /// Projedeki (veya Resources klasöründeki) tüm EventBoardGroup SO'larını bünyesinde toplar ve EventBoard'a kaydeder.
         /// </summary>
-        [ContextMenu("Klasördeki Tüm Event Grup SO'larını Topla")]
+        [ContextMenu("Tüm Projedeki Event Grup SO'larını Bul ve Ekle")]
         public void CollectAndRegisterAllGroups()
         {
             if (eventGroups == null)

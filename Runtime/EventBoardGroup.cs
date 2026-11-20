@@ -109,23 +109,10 @@ namespace Yasin.EventBoard
                 {
                     string assetPath = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]);
                     EventBoardGroup g = UnityEditor.AssetDatabase.LoadAssetAtPath<EventBoardGroup>(assetPath);
-                    if (g != null)
+                    if (g != null && uniqueSet.Add(g))
                     {
-                        if (uniqueSet.Add(g))
-                        {
-                            g.EnsureLookups();
-                            _cachedGroups.Add(g);
-                        }
-
-                        // Build uyarısı: SO Resources klasöründe değilse uyar
-                        if (!assetPath.Contains($"/Resources/{folder}/") && !assetPath.Contains($"/Resources/{folder}."))
-                        {
-                            // Yalnızca proje içi asset'ler için uyar
-                            if (assetPath.StartsWith("Assets/"))
-                            {
-                                Debug.LogWarning($"[EventBoard] '{g.name}' ({assetPath}) bir Resources/{folder} klasöründe bulunmuyor! Player Build ortamında Resources.LoadAll ile yüklenemeyebilir. Lütfen bu grubu 'Resources/{folder}' altına taşıyın veya EventBoardManager üzerinde açıkça referans verin.", g);
-                            }
-                        }
+                        g.EnsureLookups();
+                        _cachedGroups.Add(g);
                     }
                 }
             }
