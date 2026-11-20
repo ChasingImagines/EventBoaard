@@ -5,8 +5,8 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Sıfır çöp (Zero-GC / Zero-Boxing) üreten, O(1) tam sayı kimlikli merkezi Blackboard ve Event Hub motoru.
-    /// Değer tipleri (int, float, bool, Vector3, VoidSignal, özel struct) asla object'e dönüştürülmez.
+    /// Zero-GC, zero-boxing, O(1) integer-hashed central Blackboard and Event Hub engine.
+    /// Value types (int, float, bool, Vector3, VoidSignal, custom structs) are never boxed.
     /// </summary>
     public static class EventBoard
     {
@@ -120,7 +120,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// DLC veya Addressables ile çalışma zamanında yüklenen ekstra bir EventBoardGroup SO'sunu sisteme kaydeder.
+        /// Dynamically registers an extra EventBoardGroup SO loaded at runtime (e.g., via DLC or Addressables).
         /// </summary>
         public static void RegisterGroup(EventBoardGroup group)
         {
@@ -136,7 +136,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Çalışma zamanında dinamik kaydedilen bir EventBoardGroup SO'sunu kaldırır.
+        /// Unregisters a dynamically registered EventBoardGroup SO.
         /// </summary>
         public static void UnregisterGroup(EventBoardGroup group, bool removeChannels = false)
         {
@@ -254,8 +254,7 @@ namespace Yasin.EventBoard
 #endif
 
         /// <summary>
-        /// Birden fazla EventBoardGroup SO içerisindeki tüm kanalların varsayılan (DefaultValue) ve kaydedilebilirlik (IsSaveable)
-        /// ayarlarını ilgili generic kanallara (Zero-Boxing ile) yükler.
+        /// Hydrates default values and saveability settings from multiple EventBoardGroup SOs into their generic channels without boxing.
         /// </summary>
         public static void HydrateFromGroups(IReadOnlyList<EventBoardGroup> groups)
         {
@@ -269,7 +268,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Tek bir EventBoardGroup SO içerisindeki kanalları merkezi EventBoard motoruna yükler.
+        /// Hydrates all channels from a single EventBoardGroup SO into the EventBoard engine.
         /// </summary>
         public static void HydrateFromGroup(EventBoardGroup group)
         {
@@ -293,7 +292,7 @@ namespace Yasin.EventBoard
                     !string.IsNullOrEmpty(existingGuid) &&
                     !string.Equals(existingGuid, entry.guid, StringComparison.Ordinal))
                 {
-                    Debug.LogError($"[EventBoard] 32-bit FNV-1a Hash çakışması tespit edildi! ID: {runtimeId} -> Mevcut GUID: '{existingGuid}', Yeni GUID: '{entry.guid}' ({fullPath}). Lütfen çakışan olayı yeniden oluşturun.", group);
+                    Debug.LogError($"[EventBoard] 32-bit FNV-1a Hash collision detected! ID: {runtimeId} -> Existing GUID: '{existingGuid}', New GUID: '{entry.guid}' ({fullPath}). Please recreate the conflicting event.", group);
                     continue;
                 }
 
@@ -346,8 +345,8 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Sabit ve deterministik 32-bit FNV-1a Hash hesaplar (Sıfır GC tahsisi).
-        /// Boş olmayan dizgeler için asla 0 döndürmez.
+        /// Computes a deterministic 32-bit FNV-1a hash with zero GC allocation.
+        /// Never returns 0 for non-empty strings.
         /// </summary>
         public static int ComputeId(string key)
         {
@@ -373,7 +372,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanal değerini Blackboard'a yazar ve tüm aboneleri sıfır çöp (Zero-GC) ile tetikler.
+        /// Writes the payload to the Blackboard and dispatches it to all subscribers with zero GC allocation.
         /// </summary>
         public static void Publish<T>(int runtimeId, T payload, string fallbackPath = null)
         {
@@ -386,7 +385,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Değer yalnızca mevcut Blackboard değerinden farklıysa yayınlar (Yüksek frekans / spam koruması).
+        /// Publishes the payload only if it differs from the current Blackboard value (spam protection).
         /// </summary>
         public static bool PublishIfChanged<T>(int runtimeId, T payload, string fallbackPath = null)
         {
@@ -399,7 +398,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Aboneleri tetiklemeden (veya isteğe bağlı tetikleyerek) Blackboard durumunu günceller.
+        /// Updates the Blackboard state silently (or optionally notifies subscribers).
         /// </summary>
         public static void SetState<T>(int runtimeId, T value, bool notify = false, string fallbackPath = null)
         {
@@ -412,7 +411,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Değer yalnızca mevcut Blackboard değerinden farklıysa durumu günceller (Sıfır gereksiz yazma).
+        /// Updates the Blackboard state only if the value differs from the current value.
         /// </summary>
         public static bool SetStateIfChanged<T>(int runtimeId, T value, bool notify = false, string fallbackPath = null)
         {
@@ -425,7 +424,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Blackboard'daki son değeri (veya DefaultValue'yu) sıfır GC ile okur.
+        /// Reads the latest Blackboard value (or default value) with zero GC allocation.
         /// </summary>
         public static bool TryGet<T>(int runtimeId, out T value)
         {
@@ -446,7 +445,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Blackboard'daki güncel değeri döndürür; değer yoksa verilen yedek (fallback) değeri döndürür.
+        /// Returns the current Blackboard value, or the provided fallback if unset.
         /// </summary>
         public static T GetValueOrDefault<T>(int runtimeId, T fallback = default)
         {
@@ -463,7 +462,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanalda geçerli bir Blackboard değeri olup olmadığını döndürür.
+        /// Returns whether this channel currently has a valid runtime or default value.
         /// </summary>
         public static bool HasValue<T>(int runtimeId)
         {
@@ -480,7 +479,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala abone olur. <paramref name="replayLatest"/> true ise mevcut Blackboard değeri anında iletilir.
+        /// Subscribes to a channel. If <paramref name="replayLatest"/> is true, invokes the listener immediately with the current value.
         /// </summary>
         public static EventSubscription Subscribe<T>(int runtimeId, Action<T> listener, bool replayLatest = false, string fallbackPath = null)
         {
@@ -493,7 +492,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala açık bir sahip (owner) nesnesiyle abone olur; lambda/closure aboneliklerinde dahi sahip yok edildiğinde otomatik temizlenir.
+        /// Subscribes with an explicit owner object; automatically cleans up when the owner is destroyed, even for lambdas/closures.
         /// </summary>
         public static EventSubscription Subscribe<T>(int runtimeId, UnityEngine.Object owner, Action<T> listener, bool replayLatest = false, string fallbackPath = null)
         {
@@ -506,7 +505,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala parametresiz (closure tahsissiz) olarak abone olur.
+        /// Subscribes a parameterless callback without closure allocations.
         /// </summary>
         public static EventSubscription Subscribe<T>(int runtimeId, Action listener, bool replayLatest = false, string fallbackPath = null)
         {
@@ -519,7 +518,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala açık bir sahip (owner) nesnesiyle parametresiz olarak abone olur.
+        /// Subscribes a parameterless callback with an explicit owner object for automatic cleanup on destruction.
         /// </summary>
         public static EventSubscription Subscribe<T>(int runtimeId, UnityEngine.Object owner, Action listener, bool replayLatest = false, string fallbackPath = null)
         {
@@ -532,7 +531,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanal aboneliğinden çıkar.
+        /// Unsubscribes a typed listener from the channel.
         /// </summary>
         public static void Unsubscribe<T>(int runtimeId, Action<T> listener)
         {
@@ -546,7 +545,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Parametresiz kanal aboneliğinden çıkar.
+        /// Unsubscribes a parameterless listener from the channel.
         /// </summary>
         public static void Unsubscribe<T>(int runtimeId, Action listener)
         {
@@ -560,7 +559,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Belirli bir kanalın Blackboard durumunu temizler.
+        /// Clears the Blackboard state of a specific channel.
         /// </summary>
         public static void ClearChannel<T>(int runtimeId, bool restoreDefault = true)
         {
@@ -608,7 +607,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Sahne geçişlerinde kalıcı olmayan (IsSaveable == false) tüm kanalların Blackboard değerlerini temizler.
+        /// Clears runtime Blackboard values for all non-saveable channels (e.g., on scene transitions).
         /// </summary>
         public static void ClearNonPersistent(bool restoreDefaults = true)
         {
@@ -623,7 +622,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Abonelikleri koruyarak tüm kanalların çalışma zamanı Blackboard değerlerini sıfırlar.
+        /// Clears runtime Blackboard values for all channels while keeping existing subscriptions intact.
         /// </summary>
         public static void ClearAllValues(bool restoreDefaults = true)
         {
@@ -634,7 +633,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Tüm abonelikleri ve geçici durumları sıfırlar (Oyun başlangıcı ve testler için).
+        /// Resets all subscriptions and temporary channel states (for startup and tests).
         /// </summary>
         public static void ResetAll(bool clearDynamicGroups = false)
         {

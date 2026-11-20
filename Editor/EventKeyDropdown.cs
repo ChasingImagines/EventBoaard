@@ -5,8 +5,7 @@ using UnityEditor.IMGUI.Controls;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// Inspector'da EventKey&lt;T&gt; alanları için klasördeki tüm EventBoardGroup SO'larını tarayıp,
-    /// yalnızca ilgili &lt;T&gt; veri tipine uyan olayları Grup SO bazında listeleyen AdvancedDropdown menüsü.
+    /// AdvancedDropdown menu for EventKey&lt;T&gt; fields that lists matching channels grouped by EventBoardGroup SO.
     /// </summary>
     public sealed class EventKeyDropdown : AdvancedDropdown
     {
@@ -43,15 +42,15 @@ namespace Yasin.EventBoard.Editor
 
         protected override AdvancedDropdownItem BuildRoot()
         {
-            string typeLabel = _expectedType != null ? EventKeyDrawer.GetFriendlyTypeName(_expectedType) : "Tüm Tipler";
-            AdvancedDropdownItem root = new AdvancedDropdownItem($"EventBoard Grupları ({typeLabel})");
+            string typeLabel = _expectedType != null ? EventKeyDrawer.GetFriendlyTypeName(_expectedType) : "All Types";
+            AdvancedDropdownItem root = new AdvancedDropdownItem($"EventBoard Groups ({typeLabel})");
 
-            // Atamayı sıfırlama seçeneği
-            root.AddChild(new ChannelDropdownItem("Temizle (None)", string.Empty, string.Empty, isClearOption: true));
+            // Clear assignment option
+            root.AddChild(new ChannelDropdownItem("Clear (None)", string.Empty, string.Empty, isClearOption: true));
 
             if (_groups == null || _groups.Count == 0)
             {
-                root.AddChild(new AdvancedDropdownItem("(Proje içinde EventBoardGroup SO bulunamadı — [+] ile oluşturun)"));
+                root.AddChild(new AdvancedDropdownItem("(No EventBoardGroup SO found in project — create via [+])"));
                 return root;
             }
 
@@ -90,7 +89,7 @@ namespace Yasin.EventBoard.Editor
 
             if (matchedCount == 0)
             {
-                root.AddChild(new AdvancedDropdownItem($"('{typeLabel}' tipinde kayıtlı kanal bulunamadı — [+] ile Grup SO'ya ekleyin)"));
+                root.AddChild(new AdvancedDropdownItem($"(No '{typeLabel}' channel found — add one via [+])"));
             }
 
             return root;

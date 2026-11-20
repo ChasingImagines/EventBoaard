@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// EventBoardGroup içindeki her olayın veri tipini ve başlangıç (Blackboard Default) değerini
-    /// dış paket bağımlılığı olmadan ([SerializeReference] ile) tanımlayan soyut temel sınıf.
+    /// Abstract base class defining the payload type and initial Blackboard default value for each event
+    /// in an EventBoardGroup without external package dependencies (via [SerializeReference]).
     /// </summary>
     [Serializable]
     public abstract class EventPayloadDefinition
@@ -16,24 +16,24 @@ namespace Yasin.EventBoard
         public virtual bool SupportsSaveable => SupportsDefaultValue && !typeof(UnityEngine.Object).IsAssignableFrom(PayloadType);
 
         /// <summary>
-        /// Grup SO içindeki varsayılan değeri ve kalıcılık bilgisini ilgili generic kanala (Zero-Boxing ile) yükler.
+        /// Configures the default value and saveability metadata on the corresponding generic channel without boxing.
         /// </summary>
         public abstract void ConfigureChannel(int runtimeId, string guid, string eventPath, bool isSaveable);
 
         /// <summary>
-        /// Editör arayüzünde varsayılan değerin metin özetini döndürür.
+        /// Returns a text summary of the default value for Editor display.
         /// </summary>
         public abstract string GetDefaultValueSummary();
     }
 
     /// <summary>
-    /// Yeni bir veri tipi (struct veya class) eklemek için bu sınıftan türetmeniz yeterlidir;
-    /// Editör tip seçici menüsünde otomatik olarak listelenir.
+    /// Derive from this class to register a custom struct or class payload type;
+    /// it is automatically discovered by the Editor type selector via TypeCache.
     /// </summary>
     [Serializable]
     public abstract class EventPayloadDefinition<T> : EventPayloadDefinition
     {
-        [Tooltip("Oyun başladığında henüz hiçbir olay tetiklenmeden önce Blackboard'da bulunacak başlangıç değeri.")]
+        [Tooltip("Initial Blackboard value available at startup before any event has been published.")]
         public T defaultValue;
 
         public override Type PayloadType => typeof(T);
@@ -123,4 +123,3 @@ namespace Yasin.EventBoard
         public override string DisplayName => "Transform";
     }
 }
-

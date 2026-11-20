@@ -6,8 +6,8 @@ using UnityEngine.Serialization;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Belirli bir kategoriye/gruba ait EventBoard kanallarını liste olarak tutan ScriptableObject.
-    /// Projedeki herhangi bir klasörde saklanabilir; Editör tarafından otomatik olarak EventBoardRegistry ile senkronize edilir.
+    /// ScriptableObject holding a categorized list of EventBoard channels.
+    /// Can be placed in any folder under Assets/; automatically synchronized with EventBoardRegistry by the Editor.
     /// </summary>
     [CreateAssetMenu(fileName = "NewEventGroup", menuName = "EventBoard/Event Group (SO)", order = 10)]
     public sealed class EventBoardGroup : ScriptableObject
@@ -15,28 +15,28 @@ namespace Yasin.EventBoard
         [Serializable]
         public sealed class EventEntry
         {
-            [Tooltip("Olayın değişmez benzersiz kimliği (GUID). Olay adı değişse veya başka grup SO'suna taşınsa bile sahne/prefab bağlantıları bu kimlik sayesinde kopmaz.")]
+            [Tooltip("Immutable unique identifier (GUID). Scene and prefab references stay intact even if the event is renamed or moved to another group.")]
             public string guid;
 
             [FormerlySerializedAs("eventPath")]
-            [Tooltip("Bu grup içindeki olayın adı (Örn: IsPlacementActive, OnObjectPlaced).")]
+            [Tooltip("Event name within this group (e.g., IsPlacementActive, OnObjectPlaced).")]
             public string eventName = "NewEvent";
 
             [SerializeReference]
             public EventPayloadDefinition payload = new VoidPayload();
 
             [FormerlySerializedAs("isPersistent")]
-            [Tooltip("İşaretlenirse bu kanalın Blackboard değeri EventBoard.ExportStateJson() çağrıldığında kaydedilebilir snapshot içine dahil edilir.")]
+            [Tooltip("When enabled, this channel's Blackboard value is included in EventBoard.ExportStateJson() snapshots.")]
             public bool isSaveable;
 
-            [Tooltip("Bu kanalın ne zaman tetiklendiğini ve ne işe yaradığını açıklayan geliştirici notu.")]
+            [Tooltip("Developer note describing when this channel is triggered and what it represents.")]
             public string description = string.Empty;
 
             public int RuntimeId => EventBoard.ComputeId(guid);
 
             public Type PayloadType => payload != null ? payload.PayloadType : typeof(VoidSignal);
 
-            public string PayloadDisplayName => payload != null ? payload.DisplayName : "Tanımsız";
+            public string PayloadDisplayName => payload != null ? payload.DisplayName : "Undefined";
         }
 
         [SerializeField]
@@ -70,7 +70,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Projedeki (Editör'de AssetDatabase'deki, Build ortamında ise EventBoardRegistry + dinamik kayıtlardaki) tüm EventBoardGroup SO'larını döndürür.
+        /// Returns all EventBoardGroup SOs in the project (from AssetDatabase in Editor, or from EventBoardRegistry and dynamic registrations in Player Builds).
         /// </summary>
         public static IReadOnlyList<EventBoardGroup> GetAllGroups(bool forceRefresh = false)
         {
@@ -124,7 +124,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Tüm EventBoardGroup SO'ları içinde verilen GUID'e sahip olayı ve ait olduğu grup SO'sunu bulur.
+        /// Finds the event entry and owning EventBoardGroup SO for the given GUID across all project groups.
         /// </summary>
         public static bool TryFindByGuid(string guid, out EventBoardGroup ownerGroup, out EventEntry entry)
         {
@@ -178,7 +178,7 @@ namespace Yasin.EventBoard
                     events[i] = entry;
                 }
 
-                // Boş veya aynı grup içinde çoğaltılmış GUID'leri benzersizleştir
+                // Deduplicate empty or intra-group duplicated GUIDs
                 if (string.IsNullOrWhiteSpace(entry.guid) || !seenGuids.Add(entry.guid))
                 {
                     entry.guid = Guid.NewGuid().ToString("N");
@@ -305,8 +305,8 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Verilen C# veri tipine (T) karşılık gelen EventPayloadDefinition örneğini bulup oluşturmayı dener.
-        /// Tanımlı değilse sessizce VoidPayload üretmez; false döndürür.
+        /// Attempts to find and instantiate an EventPayloadDefinition matching <paramref name="targetType"/>.
+        /// Returns false instead of silently falling back to VoidPayload when none is defined.
         /// </summary>
         public static bool TryCreatePayloadForType(Type targetType, out EventPayloadDefinition payload)
         {
@@ -387,7 +387,7 @@ namespace Yasin.EventBoard
                         }
                         catch
                         {
-                            // Parametresiz kurucusu olmayanları atla
+                            // Skip types without a parameterless constructor
                         }
                     }
                 }

@@ -8,11 +8,11 @@ using UnityEngine;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// EventBoard için 4 sekmeli profesyonel mühendislik ve hata ayıklama penceresi:
-    /// 1) Canlı Blackboard Monitörü &amp; Test Tetikleyici (Grup SO bazında kırılımlı)
-    /// 2) Sahne &amp; Proje Bağlantı Matrisi
-    /// 3) Statik Proje Denetimi (Audit)
-    /// 4) Zero-GC Performans Testi
+    /// 4-tab engineering dashboard and diagnostic window for EventBoard:
+    /// 1) Live Blackboard Monitor &amp; Test Trigger (grouped by SO)
+    /// 2) Scene &amp; Project Connection Matrix
+    /// 3) Static Project Audit
+    /// 4) Zero-GC Performance Benchmark
     /// </summary>
     public sealed class EventBoardWindow : EditorWindow
     {
@@ -32,10 +32,10 @@ namespace Yasin.EventBoard.Editor
         private int _selectedTab;
         private readonly string[] _tabLabels =
         {
-            "📡 Canlı",
-            "🕸️ Bağlantılar",
-            "🛡️ Denetim",
-            "⚡ Performans"
+            "📡 Live",
+            "🕸️ Links",
+            "🛡️ Audit",
+            "⚡ Benchmark"
         };
 
         private string _searchFilter = string.Empty;
@@ -45,7 +45,7 @@ namespace Yasin.EventBoard.Editor
         private string _lastBenchmarkReport = string.Empty;
         private bool _includeProjectAssets;
 
-        // Canlı Test Tetikleyici durumu
+        // Live Test Trigger state
         private string _selectedChannelGuid = string.Empty;
         private int _testInt;
         private float _testFloat;
@@ -55,7 +55,7 @@ namespace Yasin.EventBoard.Editor
         private Vector3 _testVector3;
         private Color _testColor = Color.cyan;
 
-        // Sahne ve Denetim önbelleği
+        // Scene & Audit cache
         private readonly List<SceneKeyUsage> _sceneUsages = new List<SceneKeyUsage>();
         private readonly List<SceneKeyUsage> _entryUsageBuffer = new List<SceneKeyUsage>(8);
         private readonly List<string> _orphanChannelPaths = new List<string>();
@@ -102,11 +102,11 @@ namespace Yasin.EventBoard.Editor
             if (groups == null || groups.Count == 0)
             {
                 EditorGUILayout.Space(12f);
-                EditorGUILayout.HelpBox("Proje içinde henüz bir EventBoardGroup SO varlığı bulunamadı.", MessageType.Warning);
+                EditorGUILayout.HelpBox("No EventBoardGroup SO assets found in the project yet.", MessageType.Warning);
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    _newGroupAssetName = EditorGUILayout.TextField("Yeni Grup SO", _newGroupAssetName);
-                    if (GUILayout.Button("+ Oluştur", GUILayout.Height(24f), GUILayout.Width(100f)))
+                    _newGroupAssetName = EditorGUILayout.TextField("New Group SO", _newGroupAssetName);
+                    if (GUILayout.Button("+ Create", GUILayout.Height(24f), GUILayout.Width(100f)))
                     {
                         EventBoardRegistryUtility.CreateGroupAsset(_newGroupAssetName, ping: true);
                     }
@@ -169,7 +169,7 @@ namespace Yasin.EventBoard.Editor
                     }
                 }
 
-                if (GUILayout.Button("🔄 Yenile", EditorStyles.toolbarButton, GUILayout.Width(68f)))
+                if (GUILayout.Button("🔄 Refresh", EditorStyles.toolbarButton, GUILayout.Width(72f)))
                 {
                     EventBoardGroup.InvalidateGroupCache();
                     EventBoardRegistryUtility.SyncAllGroups(createRegistryIfGroupsExist: true, saveAssets: false);
@@ -187,19 +187,19 @@ namespace Yasin.EventBoard.Editor
 
                 if (Application.isPlaying)
                 {
-                    if (GUILayout.Button("Değerleri Sıfırla", EditorStyles.miniButton, GUILayout.Width(105f)))
+                    if (GUILayout.Button("Reset Values", EditorStyles.miniButton, GUILayout.Width(100f)))
                     {
                         EventBoard.ClearAllValues(restoreDefaults: true);
                     }
 
                     GUI.backgroundColor = new Color(1f, 0.55f, 0.55f);
-                    if (GUILayout.Button("Tam Sıfırla", EditorStyles.miniButton, GUILayout.Width(85f)))
+                    if (GUILayout.Button("Full Reset", EditorStyles.miniButton, GUILayout.Width(85f)))
                     {
                         if (EditorUtility.DisplayDialog(
-                                "EventBoard Tam Sıfırlama",
-                                "Tüm çalışma zamanı Blackboard değerleri VE aktif abonelikler silinecek. Devam etmek istiyor musunuz?",
-                                "Evet, Sıfırla",
-                                "İptal"))
+                                "EventBoard Full Reset",
+                                "All runtime Blackboard values AND active subscriptions will be cleared. Continue?",
+                                "Yes, Reset",
+                                "Cancel"))
                         {
                             EventBoard.ResetAll();
                         }
@@ -230,7 +230,7 @@ namespace Yasin.EventBoard.Editor
                     IReadOnlyList<EventBoardGroup.EventEntry> entries = group.Events;
                     if (entries == null || entries.Count == 0)
                     {
-                        EditorGUILayout.LabelField("   (Boş)", EditorStyles.miniLabel);
+                        EditorGUILayout.LabelField("   (Empty)", EditorStyles.miniLabel);
                         continue;
                     }
 
@@ -264,14 +264,14 @@ namespace Yasin.EventBoard.Editor
                                 EditorGUILayout.LabelField(typeBadge, EditorStyles.miniLabel, GUILayout.Width(80f));
 
                                 string valText = Application.isPlaying && liveSlot != null
-                                    ? $"Değer: {liveSlot.GetFormattedValue()}"
-                                    : $"Varsayılan: {(entry.payload != null ? entry.payload.GetDefaultValueSummary() : "—")}";
+                                    ? $"Value: {liveSlot.GetFormattedValue()}"
+                                    : $"Default: {(entry.payload != null ? entry.payload.GetDefaultValueSummary() : "—")}";
 
                                 EditorGUILayout.LabelField(valText, GUILayout.Width(165f));
 
                                 int subCount = liveSlot != null ? liveSlot.SubscriberCount : 0;
                                 int pubCount = liveSlot != null ? liveSlot.PublishCount : 0;
-                                EditorGUILayout.LabelField($"Abone: {subCount}  |  Yayın: {pubCount}", EditorStyles.miniLabel, GUILayout.Width(120f));
+                                EditorGUILayout.LabelField($"Subs: {subCount}  |  Pubs: {pubCount}", EditorStyles.miniLabel, GUILayout.Width(120f));
 
                                 if (GUILayout.Button(isSelected ? "▲" : "▼ Test", EditorStyles.miniButton, GUILayout.Width(60f)))
                                 {
@@ -299,14 +299,14 @@ namespace Yasin.EventBoard.Editor
                 EditorGUILayout.LabelField($"GUID: {entry.guid}   |   ID: {entry.RuntimeId}", EditorStyles.miniLabel);
                 if (!string.IsNullOrEmpty(entry.description))
                 {
-                    EditorGUILayout.LabelField($"Not: {entry.description}", EditorStyles.wordWrappedMiniLabel);
+                    EditorGUILayout.LabelField($"Note: {entry.description}", EditorStyles.wordWrappedMiniLabel);
                 }
 
-                // Canlı Abone Listesi
+                // Live Subscriber List
                 if (Application.isPlaying && liveSlot != null && liveSlot.SubscriberCount > 0)
                 {
                     EditorGUILayout.Space(2f);
-                    EditorGUILayout.LabelField("Aboneler:", EditorStyles.boldLabel);
+                    EditorGUILayout.LabelField("Subscribers:", EditorStyles.boldLabel);
                     liveSlot.CopySubscribersTo(_subscriberBuffer);
 
                     for (int i = 0; i < _subscriberBuffer.Count; i++)
@@ -322,7 +322,7 @@ namespace Yasin.EventBoard.Editor
 
                             if (del.Target is UnityEngine.Object unityObj && unityObj != null)
                             {
-                                if (GUILayout.Button("🎯 Seç", EditorStyles.miniButton, GUILayout.Width(55f)))
+                                if (GUILayout.Button("🎯 Select", EditorStyles.miniButton, GUILayout.Width(65f)))
                                 {
                                     EditorGUIUtility.PingObject(unityObj);
                                     Selection.activeObject = unityObj;
@@ -332,7 +332,7 @@ namespace Yasin.EventBoard.Editor
                     }
                 }
 
-                // Play Mode Canlı Test Tetikleyici
+                // Play Mode Live Test Trigger
                 if (Application.isPlaying)
                 {
                     EditorGUILayout.Space(4f);
@@ -342,7 +342,7 @@ namespace Yasin.EventBoard.Editor
                         object payloadToFire = DrawTestPayloadField(entry.PayloadType);
 
                         GUI.backgroundColor = new Color(0.35f, 0.9f, 0.5f);
-                        if (GUILayout.Button("⚡ Tetikle", GUILayout.Width(85f)))
+                        if (GUILayout.Button("⚡ Publish", GUILayout.Width(85f)))
                         {
                             TriggerEditorTestPublish(group, entry, liveSlot, payloadToFire);
                         }
@@ -395,7 +395,7 @@ namespace Yasin.EventBoard.Editor
                 return _testColor;
             }
 
-            EditorGUILayout.LabelField($"({type.Name} tipi için varsayılan değer gönderilir)", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField($"(Default value will be sent for type '{type.Name}')", EditorStyles.miniLabel);
             return type.IsValueType ? Activator.CreateInstance(type) : null;
         }
 
@@ -424,7 +424,7 @@ namespace Yasin.EventBoard.Editor
             DrawAssetScanToggle();
 
             EditorGUILayout.HelpBox(
-                $"Taranan kapsamda toplam {_sceneUsages.Count} adet EventKey<T> referansı bulundu.",
+                $"Found {_sceneUsages.Count} EventKey<T> references in the scanned scope.",
                 MessageType.Info);
 
             for (int g = 0; g < groups.Count; g++)
@@ -457,12 +457,12 @@ namespace Yasin.EventBoard.Editor
                     using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
                     {
                         EditorGUILayout.LabelField(
-                            $"📦 {fullName}   ({EventKeyDrawer.GetFriendlyTypeName(entry.PayloadType)})   —   Bağlantı: {_entryUsageBuffer.Count}",
+                            $"📦 {fullName}   ({EventKeyDrawer.GetFriendlyTypeName(entry.PayloadType)})   —   Links: {_entryUsageBuffer.Count}",
                             EditorStyles.boldLabel);
 
                         if (_entryUsageBuffer.Count == 0)
                         {
-                            EditorGUILayout.LabelField("   Bu kapsamda doğrudan bağlanan bir referans yok.", EditorStyles.miniLabel);
+                            EditorGUILayout.LabelField("   No references bound in this scope.", EditorStyles.miniLabel);
                         }
                         else
                         {
@@ -479,7 +479,7 @@ namespace Yasin.EventBoard.Editor
                                         $"   • {ownerLabel}  [{usage.Context.GetType().Name}.{usage.FieldName}]",
                                         EditorStyles.miniLabel);
 
-                                    if (GUILayout.Button("🎯 Seç", EditorStyles.miniButton, GUILayout.Width(60f)))
+                                    if (GUILayout.Button("🎯 Select", EditorStyles.miniButton, GUILayout.Width(65f)))
                                     {
                                         SelectUsageContext(usage.Context);
                                     }
@@ -498,16 +498,16 @@ namespace Yasin.EventBoard.Editor
                 RefreshSceneMatrix();
             }
 
-            // 1) Registry ve PreloadedAssets sağlık kontrolü
+            // 1) Registry & PreloadedAssets health check
             EventBoardRegistry registry = EventBoardRegistryUtility.FindRegistry();
             if (registry == null)
             {
                 using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                 {
                     EditorGUILayout.HelpBox(
-                        "⚠️ EventBoardRegistry asset'i henüz oluşturulmamış. Build ortamında grupların otomatik yüklenmesi için oluşturun.",
+                        "⚠️ EventBoardRegistry asset has not been created yet. Create it so groups load automatically in Player Builds.",
                         MessageType.Warning);
-                    if (GUILayout.Button("⚙️ Registry Oluştur", GUILayout.Width(140f), GUILayout.Height(36f)))
+                    if (GUILayout.Button("⚙️ Create Registry", GUILayout.Width(140f), GUILayout.Height(36f)))
                     {
                         EventBoardRegistryUtility.SyncAllGroups(createRegistryIfGroupsExist: true, saveAssets: true);
                     }
@@ -518,9 +518,9 @@ namespace Yasin.EventBoard.Editor
                 using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                 {
                     EditorGUILayout.HelpBox(
-                        "⚠️ EventBoardRegistry varlığı Preloaded Assets listesinde kayıtlı değil. Player Build'de gruplar yüklenmeyebilir.",
+                        "⚠️ EventBoardRegistry is not in PlayerSettings > Preloaded Assets. Groups may not load in Player Builds.",
                         MessageType.Warning);
-                    if (GUILayout.Button("📌 Preloaded'a Ekle", GUILayout.Width(140f), GUILayout.Height(36f)))
+                    if (GUILayout.Button("📌 Add Preloaded", GUILayout.Width(140f), GUILayout.Height(36f)))
                     {
                         EventBoardRegistryUtility.EnsurePreloaded(registry);
                     }
@@ -528,7 +528,7 @@ namespace Yasin.EventBoard.Editor
             }
             else
             {
-                EditorGUILayout.HelpBox("✅ EventBoardRegistry aktif ve PreloadedAssets içinde kayıtlı (Build hazır).", MessageType.Info);
+                EditorGUILayout.HelpBox("✅ EventBoardRegistry is active and registered in Preloaded Assets (Build Ready).", MessageType.Info);
             }
 
             DrawAssetScanToggle();
@@ -546,12 +546,12 @@ namespace Yasin.EventBoard.Editor
 
             if (unassignedCount == 0 && missingCount == 0 && mismatchCount == 0)
             {
-                EditorGUILayout.HelpBox("✅ Harika! Taranan kapsamda atanmamış (Unassigned), kırık (Missing) veya tip uyumsuz hiçbir EventKey<T> referansı bulunmadı.", MessageType.Info);
+                EditorGUILayout.HelpBox("✅ Healthy! No unassigned, missing, or type-mismatched EventKey<T> references found in the scanned scope.", MessageType.Info);
             }
             else
             {
                 EditorGUILayout.HelpBox(
-                    $"⚠️ {unassignedCount} atanmamış alan, {missingCount} silinmiş referans ve {mismatchCount} tip uyumsuzluğu tespit edildi:",
+                    $"⚠️ Found {unassignedCount} unassigned fields, {missingCount} missing references, and {mismatchCount} type mismatches:",
                     MessageType.Warning);
 
                 for (int i = 0; i < _sceneUsages.Count; i++)
@@ -565,21 +565,21 @@ namespace Yasin.EventBoard.Editor
                         string issue;
                         if (!usage.IsAssigned)
                         {
-                            issue = "⚠️ Atanmamış (Boş) Alan";
+                            issue = "⚠️ Unassigned Field";
                         }
                         else if (usage.IsMissingInGroups)
                         {
-                            issue = $"❌ Silinmiş Event ({usage.Path})";
+                            issue = $"❌ Deleted Event ({usage.Path})";
                         }
                         else
                         {
-                            issue = $"⚠️ Tip Uyumsuz (Alan: {EventKeyDrawer.GetFriendlyTypeName(usage.ValueType)} vs Grup: {EventKeyDrawer.GetFriendlyTypeName(usage.ExpectedPayloadType)})";
+                            issue = $"⚠️ Type Mismatch (Field: {EventKeyDrawer.GetFriendlyTypeName(usage.ValueType)} vs Group: {EventKeyDrawer.GetFriendlyTypeName(usage.ExpectedPayloadType)})";
                         }
 
                         EditorGUILayout.LabelField(
                             $"{issue}: {GetUsageContextName(usage.Context)} -> {usage.Context.GetType().Name}.{usage.FieldName}");
 
-                        if (GUILayout.Button("🎯 Seç", GUILayout.Width(65f)))
+                        if (GUILayout.Button("🎯 Select", GUILayout.Width(70f)))
                         {
                             SelectUsageContext(usage.Context);
                         }
@@ -588,10 +588,10 @@ namespace Yasin.EventBoard.Editor
             }
 
             EditorGUILayout.Space(8f);
-            EditorGUILayout.LabelField($"👻 Kullanılmayan Eventler ({_orphanChannelPaths.Count})", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField($"👻 Unused Events ({_orphanChannelPaths.Count})", EditorStyles.boldLabel);
             if (_orphanChannelPaths.Count == 0)
             {
-                EditorGUILayout.LabelField("Grup SO'larındaki tüm eventler taranan kapsamda kullanılıyor.", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField("All events defined in Group SOs are referenced in the scanned scope.", EditorStyles.miniLabel);
             }
             else
             {
@@ -604,7 +604,7 @@ namespace Yasin.EventBoard.Editor
 
         private void DrawAssetScanToggle()
         {
-            bool newInclude = EditorGUILayout.ToggleLeft("📦 Proje Prefab & ScriptableObject'lerini de Tara", _includeProjectAssets);
+            bool newInclude = EditorGUILayout.ToggleLeft("📦 Also Scan Project Prefabs & ScriptableObjects", _includeProjectAssets);
             if (newInclude != _includeProjectAssets)
             {
                 _includeProjectAssets = newInclude;
@@ -887,13 +887,13 @@ namespace Yasin.EventBoard.Editor
         {
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField("⚡ EventBoard Performans & Zero-GC Testi", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("⚡ EventBoard Performance & Zero-GC Benchmark", EditorStyles.boldLabel);
 
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    _benchmarkIterations = Mathf.Clamp(EditorGUILayout.IntField("Tekrar Sayısı", _benchmarkIterations), 1000, 10000000);
+                    _benchmarkIterations = Mathf.Clamp(EditorGUILayout.IntField("Iterations", _benchmarkIterations), 1000, 10000000);
                     GUI.backgroundColor = new Color(0.35f, 0.9f, 0.5f);
-                    if (GUILayout.Button("⚡ Test Et", GUILayout.Height(22f), GUILayout.Width(95f)))
+                    if (GUILayout.Button("⚡ Run Benchmark", GUILayout.Height(22f), GUILayout.Width(120f)))
                     {
                         _lastBenchmarkReport = RunBenchmarkReport(_benchmarkIterations);
                     }
@@ -945,14 +945,14 @@ namespace Yasin.EventBoard.Editor
 
                 EventBoard.Subscribe(benchIdBool, boolSub);
 
-                // JIT Isınma (Warmup)
+                // JIT Warmup
                 EventBoard.Publish(benchIdInt, 1);
                 EventBoard.TryGet(benchIdInt, out int _);
                 EventBoard.Publish(benchIdVec, Vector3.one);
                 EventBoard.PublishIfChanged(benchIdBool, false);
                 boolFiredCount = 0;
 
-                // 1) Blackboard TryGet<int> Testi
+                // 1) Blackboard TryGet<int> Benchmark
                 long memBeforeRead = GC.GetAllocatedBytesForCurrentThread();
                 var swRead = System.Diagnostics.Stopwatch.StartNew();
                 for (int i = 0; i < iterations; i++)
@@ -963,7 +963,7 @@ namespace Yasin.EventBoard.Editor
                 swRead.Stop();
                 long allocRead = GC.GetAllocatedBytesForCurrentThread() - memBeforeRead;
 
-                // 2) Publish<int> (4 Abone) Testi
+                // 2) Publish<int> (4 Subscribers) Benchmark
                 long memBeforeInt = GC.GetAllocatedBytesForCurrentThread();
                 var swInt = System.Diagnostics.Stopwatch.StartNew();
                 for (int i = 0; i < iterations; i++)
@@ -973,7 +973,7 @@ namespace Yasin.EventBoard.Editor
                 swInt.Stop();
                 long allocInt = GC.GetAllocatedBytesForCurrentThread() - memBeforeInt;
 
-                // 3) Publish<Vector3> (4 Abone - Struct Zero-Boxing) Testi
+                // 3) Publish<Vector3> (4 Subscribers - Zero-Boxing Struct) Benchmark
                 Vector3 sampleVec = new Vector3(1.5f, 2.5f, 3.5f);
                 long memBeforeVec = GC.GetAllocatedBytesForCurrentThread();
                 var swVec = System.Diagnostics.Stopwatch.StartNew();
@@ -984,7 +984,7 @@ namespace Yasin.EventBoard.Editor
                 swVec.Stop();
                 long allocVec = GC.GetAllocatedBytesForCurrentThread() - memBeforeVec;
 
-                // 4) PublishIfChanged<bool> (Yüksek Frekans Spam Koruması - 10 Değişim) Testi
+                // 4) PublishIfChanged<bool> (Spam Guard - 10 Transitions) Benchmark
                 int changeStep = Mathf.Max(1, iterations / 10);
                 bool curState = false;
                 EventBoard.SetState(benchIdBool, false, notify: false);
@@ -1012,12 +1012,12 @@ namespace Yasin.EventBoard.Editor
                 double guardNs = (guardMs * 1_000_000.0) / iterations;
 
                 return
-                    $"📊 EventBoard Benchmark Sonucu ({iterations:N0} İterasyon | Kontrol: {intSum != 0 && vecSum > 0})\n" +
+                    $"📊 EventBoard Benchmark Results ({iterations:N0} Iterations | Check: {intSum != 0 && vecSum > 0})\n" +
                     $"──────────────────────────────────────────────────────────\n" +
-                    $"1. Blackboard Okuma (TryGet<int>):     {readMs:F2} ms  ({readNs:F1} ns/çağrı)  |  GC: {allocRead} B\n" +
-                    $"2. Publish<int> (4 Abone):              {intMs:F2} ms  ({intNs:F1} ns/çağrı)  |  GC: {allocInt} B\n" +
-                    $"3. Publish<Vector3> (4 Abone Struct):   {vecMs:F2} ms  ({vecNs:F1} ns/çağrı)  |  GC: {allocVec} B\n" +
-                    $"4. PublishIfChanged<bool> (Spam Guard): {guardMs:F2} ms  ({guardNs:F1} ns/çağrı)  |  GC: {allocGuard} B  (Tetiklenen: {boolFiredCount}/{iterations:N0})";
+                    $"1. Blackboard Read (TryGet<int>):       {readMs:F2} ms  ({readNs:F1} ns/call)  |  GC: {allocRead} B\n" +
+                    $"2. Publish<int> (4 Subscribers):        {intMs:F2} ms  ({intNs:F1} ns/call)  |  GC: {allocInt} B\n" +
+                    $"3. Publish<Vector3> (4 Subs Struct):    {vecMs:F2} ms  ({vecNs:F1} ns/call)  |  GC: {allocVec} B\n" +
+                    $"4. PublishIfChanged<bool> (Spam Guard): {guardMs:F2} ms  ({guardNs:F1} ns/call)  |  GC: {allocGuard} B  (Triggered: {boolFiredCount}/{iterations:N0})";
             }
             finally
             {

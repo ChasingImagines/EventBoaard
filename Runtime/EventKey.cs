@@ -4,8 +4,7 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Editör denetim (Audit) ve bağımlılık matrisi araçlarının tüm EventKey&lt;T&gt; alanlarını
-    /// tek tip üzerinden okuyabilmesini sağlayan arayüz.
+    /// Allows Editor audit and dependency matrix tools to inspect all EventKey&lt;T&gt; fields uniformly.
     /// </summary>
     public interface IEventKey
     {
@@ -17,9 +16,8 @@ namespace Yasin.EventBoard
     }
 
     /// <summary>
-    /// Kod içine hiçbir string gömmeden, yalnızca Inspector'dan seçilen,
-    /// isim veya grup SO değişikliklerinde kırılmayan (GUID tabanlı) ve derleme zamanı tip güvenli (Compile-Time Type Safe)
-    /// Blackboard &amp; Event anahtarı.
+    /// Compile-time type-safe, GUID-backed Blackboard and Event key selected in the Inspector without magic strings.
+    /// Survives event renames and group moves seamlessly.
     /// </summary>
     [Serializable]
     public struct EventKey<T> : IEventKey, ISerializationCallbackReceiver, IEquatable<EventKey<T>>
@@ -38,7 +36,7 @@ namespace Yasin.EventBoard
         public bool IsAssigned => !string.IsNullOrEmpty(guid);
 
         /// <summary>
-        /// Kanalın çalışma zamanındaki benzersiz tam sayı (O(1) GUID Hash) kimliği.
+        /// Deterministic O(1) runtime integer ID hashed from the channel's GUID.
         /// </summary>
         public int Id
         {
@@ -79,7 +77,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Blackboard'da bu kanal için kayıtlı son değeri (veya Grup SO içindeki DefaultValue'yu) sıfır GC ve sıfır Dictionary araması ile döndürür.
+        /// Returns the latest Blackboard value (or default value) with zero GC allocation and zero dictionary lookups once cached.
         /// </summary>
         public T Value
         {
@@ -91,7 +89,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Bu kanalda şu an geçerli bir Blackboard değeri (veya varsayılan değer) olup olmadığını döndürür.
+        /// Returns whether this channel currently holds a valid Blackboard or default value.
         /// </summary>
         public bool HasValue
         {
@@ -109,7 +107,7 @@ namespace Yasin.EventBoard
         public void Raise(T payload) => Publish(payload);
 
         /// <summary>
-        /// Değeri Blackboard'a yazar ve bu kanalı dinleyen tüm abonelere sıfır çöp (Zero-GC) ile yayınlar.
+        /// Writes the payload to the Blackboard and dispatches it to all active subscribers with zero GC allocation.
         /// </summary>
         public void Publish(T payload)
         {
@@ -117,7 +115,7 @@ namespace Yasin.EventBoard
             if (slot == null)
             {
 #if UNITY_EDITOR
-                Debug.LogWarning($"[EventBoard] Inspector'dan atanmamış (Unassigned) bir EventKey<{typeof(T).Name}> üzerinden Publish çağrıldı!");
+                Debug.LogWarning($"[EventBoard] Publish called on an unassigned EventKey<{typeof(T).Name}>!");
 #endif
                 return;
             }
@@ -126,7 +124,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Değer yalnızca mevcut Blackboard değerinden farklıysa yayınlar (Yüksek frekans / gereksiz tetikleme koruması).
+        /// Publishes the payload only if it differs from the current Blackboard value (spam guard).
         /// </summary>
         public bool PublishIfChanged(T payload)
         {
@@ -138,7 +136,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Aboneleri tetiklemeden (veya isteğe bağlı tetikleyerek) yalnızca Blackboard üzerindeki durumu günceller.
+        /// Updates only the Blackboard state silently (or optionally notifies subscribers).
         /// </summary>
         public void SetState(T value, bool notify = false)
         {
@@ -150,7 +148,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Değer yalnızca mevcut Blackboard değerinden farklıysa durumu günceller (Sıfır gereksiz yazma).
+        /// Updates the Blackboard state only if the value differs from the current value.
         /// </summary>
         public bool SetStateIfChanged(T value, bool notify = false)
         {
@@ -162,7 +160,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Blackboard'daki güncel değeri (veya DefaultValue'yu) sıfır GC ile okur.
+        /// Reads the current Blackboard value (or default value) with zero GC allocation.
         /// </summary>
         public bool TryGet(out T value)
         {
@@ -177,7 +175,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Blackboard'daki güncel değeri döndürür; değer yoksa verilen yedek (fallback) değeri döndürür.
+        /// Returns the current Blackboard value, or the specified fallback if unset.
         /// </summary>
         public T GetValueOrDefault(T fallback = default)
         {
@@ -186,8 +184,8 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala abone olur. <paramref name="replayLatest"/> true ise, kanalda halihazırda bir Blackboard
-        /// değeri varsa abone olur olmaz anında bir kez tetiklenir (Late-Join / UI senkronizasyonu için idealdir).
+        /// Subscribes to this channel. When <paramref name="replayLatest"/> is true, immediately invokes the listener
+        /// if a Blackboard or default value is already present (ideal for late-join UI synchronization).
         /// </summary>
         public EventSubscription Subscribe(Action<T> listener, bool replayLatest = false)
         {
@@ -199,7 +197,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala açık bir sahip (owner) nesnesiyle abone olur; lambda/closure kullanılsa dahi sahip yok edildiğinde otomatik temizlenir.
+        /// Subscribes with an explicit owner object; automatically cleans up when the owner is destroyed, even for lambdas/closures.
         /// </summary>
         public EventSubscription Subscribe(UnityEngine.Object owner, Action<T> listener, bool replayLatest = false)
         {
@@ -211,7 +209,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala parametresiz (closure tahsisi olmadan) abone olur.
+        /// Subscribes a parameterless callback without closure allocations.
         /// </summary>
         public EventSubscription Subscribe(Action listener, bool replayLatest = false)
         {
@@ -223,7 +221,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanala açık bir sahip (owner) nesnesiyle parametresiz olarak abone olur.
+        /// Subscribes a parameterless callback with an explicit owner object for automatic cleanup on destruction.
         /// </summary>
         public EventSubscription Subscribe(UnityEngine.Object owner, Action listener, bool replayLatest = false)
         {
@@ -235,7 +233,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Kanal aboneliğinden çıkar.
+        /// Unsubscribes a typed listener from this channel.
         /// </summary>
         public void Unsubscribe(Action<T> listener)
         {
@@ -246,7 +244,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Parametresiz kanal aboneliğinden çıkar.
+        /// Unsubscribes a parameterless listener from this channel.
         /// </summary>
         public void Unsubscribe(Action listener)
         {
@@ -257,7 +255,7 @@ namespace Yasin.EventBoard
         }
 
         /// <summary>
-        /// Bu kanalın Blackboard hafızasını temizler (veya varsayılan değerine döndürür).
+        /// Clears this channel's Blackboard state (optionally restoring its default value).
         /// </summary>
         public void ClearState(bool restoreDefault = true)
         {

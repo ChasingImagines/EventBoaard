@@ -6,8 +6,8 @@ using UnityEngine;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// EventBoardGroup ScriptableObject varlıkları için Inspector'dan kolayca yeni olay (event) tanımlama,
-    /// veri tipi seçme, varsayılan Blackboard değeri girme ve kalıcılık ayarlama arayüzü.
+    /// Custom Inspector for EventBoardGroup ScriptableObjects to define events, select payload types,
+    /// configure default Blackboard values, and toggle saveability.
     /// </summary>
     [CustomEditor(typeof(EventBoardGroup))]
     public sealed class EventBoardGroupEditor : UnityEditor.Editor
@@ -65,7 +65,7 @@ namespace Yasin.EventBoard.Editor
                 }
                 catch
                 {
-                    // Parametresiz kurucusu olmayan sınıfları atla
+                    // Skip classes without a parameterless constructor
                 }
             }
 
@@ -78,7 +78,7 @@ namespace Yasin.EventBoard.Editor
 
             _payloadDisplayNames = new string[_payloadTypes.Count];
             _filterDisplayNames = new string[_payloadTypes.Count + 1];
-            _filterDisplayNames[0] = "Tümü";
+            _filterDisplayNames[0] = "All";
 
             for (int i = 0; i < _payloadTypes.Count; i++)
             {
@@ -117,13 +117,13 @@ namespace Yasin.EventBoard.Editor
         private void DrawHeaderBanner(EventBoardGroup group)
         {
             int total = _eventsProp != null ? _eventsProp.arraySize : 0;
-            int persistentCount = 0;
+            int saveableCount = 0;
             if (group.Events != null)
             {
                 for (int i = 0; i < group.Events.Count; i++)
                 {
                     if (group.Events[i] != null && group.Events[i].isSaveable)
-                        persistentCount++;
+                        saveableCount++;
                 }
             }
 
@@ -142,7 +142,7 @@ namespace Yasin.EventBoard.Editor
                 }
 
                 EditorGUILayout.LabelField(
-                    $"Event: {total}   |   💾 Kalıcı: {persistentCount}",
+                    $"Events: {total}   |   💾 Saveable: {saveableCount}",
                     EditorStyles.miniLabel);
             }
         }
@@ -151,11 +151,11 @@ namespace Yasin.EventBoard.Editor
         {
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                EditorGUILayout.LabelField("➕ Yeni Event", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("➕ Add Event", EditorStyles.boldLabel);
 
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    _newEventName = EditorGUILayout.TextField("Ad", _newEventName);
+                    _newEventName = EditorGUILayout.TextField("Name", _newEventName);
                     _newEventTypeIndex = EditorGUILayout.Popup(_newEventTypeIndex, _payloadDisplayNames, GUILayout.Width(105f));
                 }
 
@@ -166,12 +166,12 @@ namespace Yasin.EventBoard.Editor
                 {
                     using (new EditorGUI.DisabledScope(!canSaveable))
                     {
-                        _newEventPersistent = canSaveable && EditorGUILayout.ToggleLeft("💾 Kalıcı", _newEventPersistent, GUILayout.Width(85f));
+                        _newEventPersistent = canSaveable && EditorGUILayout.ToggleLeft("💾 Saveable", _newEventPersistent, GUILayout.Width(95f));
                     }
                     GUILayout.FlexibleSpace();
 
                     GUI.backgroundColor = new Color(0.35f, 0.88f, 0.48f);
-                    if (GUILayout.Button("+ Ekle", GUILayout.Height(22f), GUILayout.Width(85f)))
+                    if (GUILayout.Button("+ Add", GUILayout.Height(22f), GUILayout.Width(85f)))
                     {
                         serializedObject.ApplyModifiedProperties();
                         Undo.RecordObject(group, "Add Event To Group SO");
@@ -191,7 +191,7 @@ namespace Yasin.EventBoard.Editor
         {
             using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
             {
-                _searchQuery = EditorGUILayout.TextField("🔍 Ara", _searchQuery);
+                _searchQuery = EditorGUILayout.TextField("🔍 Search", _searchQuery);
                 if (!string.IsNullOrEmpty(_searchQuery) && GUILayout.Button("✕", GUILayout.Width(24f)))
                 {
                     _searchQuery = string.Empty;
@@ -206,7 +206,7 @@ namespace Yasin.EventBoard.Editor
         {
             if (_eventsProp == null || _eventsProp.arraySize == 0)
             {
-                EditorGUILayout.HelpBox("Henüz event yok.", MessageType.Info);
+                EditorGUILayout.HelpBox("No events defined yet.", MessageType.Info);
                 return 0;
             }
 
@@ -287,7 +287,7 @@ namespace Yasin.EventBoard.Editor
 
             using (new EditorGUILayout.VerticalScope(GUI.skin.box))
             {
-                // 1. Satır: Event Adı | Veri Tipi Seçici | Kalıcı (💾) | Sil (✕)
+                // Row 1: Event Name | Type Selector | Saveable | Delete
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     EditorGUILayout.PropertyField(nameProp, GUIContent.none, GUILayout.MinWidth(140f));
@@ -315,7 +315,7 @@ namespace Yasin.EventBoard.Editor
                     {
                         bool isPers = persistentProp.boolValue;
                         GUI.backgroundColor = isPers ? new Color(0.4f, 0.85f, 1f) : Color.white;
-                        if (GUILayout.Button(new GUIContent("💾", supportsSaveable ? "Kaydedilebilir (Saveable)" : "Bu veri tipi JSON Save/Load desteklemiyor"), EditorStyles.miniButton, GUILayout.Width(28f)))
+                        if (GUILayout.Button(new GUIContent("💾", supportsSaveable ? "Saveable (included in JSON snapshots)" : "This payload type does not support JSON Save/Load"), EditorStyles.miniButton, GUILayout.Width(28f)))
                         {
                             persistentProp.boolValue = !isPers;
                         }
@@ -323,7 +323,7 @@ namespace Yasin.EventBoard.Editor
                     }
 
                     GUI.backgroundColor = new Color(1f, 0.45f, 0.45f);
-                    if (GUILayout.Button(new GUIContent("✕", $"Sil (GUID: {guidProp.stringValue})"), EditorStyles.miniButton, GUILayout.Width(24f)))
+                    if (GUILayout.Button(new GUIContent("✕", $"Delete (GUID: {guidProp.stringValue})"), EditorStyles.miniButton, GUILayout.Width(24f)))
                     {
                         GUI.backgroundColor = Color.white;
                         return true;
@@ -331,7 +331,7 @@ namespace Yasin.EventBoard.Editor
                     GUI.backgroundColor = Color.white;
                 }
 
-                // 2. Satır: Varsayılan (DefaultValue) ve Not
+                // Row 2: Default Value and Note
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     SerializedProperty defaultValProp = payloadProp != null ? payloadProp.FindPropertyRelative("defaultValue") : null;
@@ -339,10 +339,10 @@ namespace Yasin.EventBoard.Editor
 
                     if (supportsDefault && defaultValProp != null)
                     {
-                        EditorGUILayout.PropertyField(defaultValProp, new GUIContent("Varsayılan"), GUILayout.MinWidth(140f));
+                        EditorGUILayout.PropertyField(defaultValProp, new GUIContent("Default"), GUILayout.MinWidth(140f));
                     }
 
-                    EditorGUILayout.PropertyField(descProp, new GUIContent("Not"), GUILayout.MinWidth(120f));
+                    EditorGUILayout.PropertyField(descProp, new GUIContent("Note"), GUILayout.MinWidth(120f));
                 }
             }
 

@@ -8,8 +8,7 @@ namespace Yasin.EventBoard
     }
 
     /// <summary>
-    /// EventBoard aboneliklerini tek bir IDisposable belirteci üzerinden yöneten,
-    /// sıfır bellek tahsisli (Zero-GC) abonelik tutamacı.
+    /// Zero-allocation IDisposable handle for managing EventBoard subscriptions.
     /// </summary>
     public readonly struct EventSubscription : IDisposable
     {

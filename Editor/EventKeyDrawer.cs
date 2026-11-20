@@ -7,9 +7,8 @@ using UnityEngine;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// EventKey&lt;T&gt; alanlarını Inspector'da otomatik tip algılama, GUID tabanlı kırılmaz bağlama,
-    /// Play Mode canlı Blackboard değer gösterimi ve seçilen EventBoardGroup SO içine hızlı [+] olay ekleme ile çizen PropertyDrawer.
-    /// Kod içinde hiçbir sabit kanal adı (magic string) barındırmaz.
+    /// PropertyDrawer for EventKey&lt;T&gt; featuring automatic type filtering, unbreakable GUID binding,
+    /// live Play Mode Blackboard display, and a [+] quick-create popup to define events directly in a Group SO.
     /// </summary>
     [CustomPropertyDrawer(typeof(EventKey<>), true)]
     public sealed class EventKeyDrawer : PropertyDrawer
@@ -63,13 +62,13 @@ namespace Yasin.EventBoard.Editor
             public override void OnGUI(Rect rect)
             {
                 GUILayout.Space(6f);
-                EditorGUILayout.LabelField($"Yeni Event ({GetFriendlyTypeName(_payloadType)})", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField($"New Event ({GetFriendlyTypeName(_payloadType)})", EditorStyles.boldLabel);
 
                 if (!_hasPayloadDefinition)
                 {
                     EditorGUILayout.HelpBox(
-                        $"'{_payloadType.Name}' tipi için bir EventPayloadDefinition<{_payloadType.Name}> sınıfı tanımlı değil.\n\n" +
-                        $"Örnek:\n[Serializable] public sealed class {_payloadType.Name}Payload : EventPayloadDefinition<{_payloadType.Name}>\n{{\n    public override string DisplayName => \"{_payloadType.Name}\";\n}}",
+                        $"No EventPayloadDefinition<{_payloadType.Name}> subclass is defined for '{_payloadType.Name}'.\n\n" +
+                        $"Example:\n[Serializable] public sealed class {_payloadType.Name}Payload : EventPayloadDefinition<{_payloadType.Name}>\n{{\n    public override string DisplayName => \"{_payloadType.Name}\";\n}}",
                         MessageType.Error);
                 }
 
@@ -79,16 +78,16 @@ namespace Yasin.EventBoard.Editor
                     {
                         if (!_createNewGroupSO && _groupNames.Length > 0)
                         {
-                            _selectedGroupIndex = EditorGUILayout.Popup("Grup", _selectedGroupIndex, _groupNames);
-                            if (GUILayout.Button("+ Grup", EditorStyles.miniButton, GUILayout.Width(60f)))
+                            _selectedGroupIndex = EditorGUILayout.Popup("Group", _selectedGroupIndex, _groupNames);
+                            if (GUILayout.Button("+ Group", EditorStyles.miniButton, GUILayout.Width(65f)))
                             {
                                 _createNewGroupSO = true;
                             }
                         }
                         else
                         {
-                            _newGroupSOName = EditorGUILayout.TextField("Yeni Grup", _newGroupSOName);
-                            if (_groupNames.Length > 0 && GUILayout.Button("Seç", EditorStyles.miniButton, GUILayout.Width(50f)))
+                            _newGroupSOName = EditorGUILayout.TextField("New Group", _newGroupSOName);
+                            if (_groupNames.Length > 0 && GUILayout.Button("Select", EditorStyles.miniButton, GUILayout.Width(55f)))
                             {
                                 _createNewGroupSO = false;
                             }
@@ -96,15 +95,15 @@ namespace Yasin.EventBoard.Editor
                     }
 
                     GUI.SetNextControlName("QuickEventNameField");
-                    _newEventName = EditorGUILayout.TextField("Ad", _newEventName);
+                    _newEventName = EditorGUILayout.TextField("Name", _newEventName);
 
                     bool supportsSaveable = _previewPayload != null && _previewPayload.SupportsSaveable;
                     using (new EditorGUI.DisabledScope(!supportsSaveable))
                     {
-                        _isSaveable = supportsSaveable && EditorGUILayout.Toggle("💾 Kalıcı", _isSaveable);
+                        _isSaveable = supportsSaveable && EditorGUILayout.Toggle("💾 Saveable", _isSaveable);
                     }
 
-                    _description = EditorGUILayout.TextField("Not", _description);
+                    _description = EditorGUILayout.TextField("Note", _description);
 
                     if (!_focused)
                     {
@@ -121,7 +120,7 @@ namespace Yasin.EventBoard.Editor
 
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    if (GUILayout.Button("İptal", GUILayout.Height(24f)))
+                    if (GUILayout.Button("Cancel", GUILayout.Height(24f)))
                     {
                         editorWindow.Close();
                     }
@@ -129,7 +128,7 @@ namespace Yasin.EventBoard.Editor
                     using (new EditorGUI.DisabledScope(!_hasPayloadDefinition))
                     {
                         GUI.backgroundColor = new Color(0.35f, 0.85f, 0.45f);
-                        if (GUILayout.Button("Ekle", GUILayout.Height(24f)) || enterPressed)
+                        if (GUILayout.Button("Add", GUILayout.Height(24f)) || enterPressed)
                         {
                             CreateAndAssign();
                         }
@@ -207,13 +206,13 @@ namespace Yasin.EventBoard.Editor
                 }
             }
 
-            // Etiket ve İpucu (Tooltip)
-            string tooltip = $"Tip: EventKey<{typeName}>";
+            // Label & Tooltip
+            string tooltip = $"Type: EventKey<{typeName}>";
             if (resolvedEntry != null && ownerGroup != null)
             {
-                tooltip += $"\nGrup SO: {ownerGroup.GroupName}\nEvent: {resolvedEntry.eventName}\nKaydedilebilir (Saveable): {(resolvedEntry.isSaveable ? "Evet 💾" : "Hayır")}";
+                tooltip += $"\nGroup SO: {ownerGroup.GroupName}\nEvent: {resolvedEntry.eventName}\nSaveable: {(resolvedEntry.isSaveable ? "Yes 💾" : "No")}";
                 if (!string.IsNullOrEmpty(resolvedEntry.description))
-                    tooltip += $"\nAçıklama: {resolvedEntry.description}";
+                    tooltip += $"\nDescription: {resolvedEntry.description}";
             }
 
             GUIContent richLabel = new GUIContent(label.text, tooltip);
@@ -224,29 +223,29 @@ namespace Yasin.EventBoard.Editor
             Rect dropdownRect = new Rect(fieldRect.x, fieldRect.y, Mathf.Max(40f, fieldRect.width - addButtonWidth - spacing), fieldRect.height);
             Rect addBtnRect = new Rect(dropdownRect.xMax + spacing, fieldRect.y, addButtonWidth, fieldRect.height);
 
-            // Buton metni ve rengi
+            // Button text & tint
             Color prevBg = GUI.backgroundColor;
             string buttonText;
 
             if (hasMultipleValues)
             {
                 GUI.backgroundColor = new Color(0.95f, 0.9f, 0.7f);
-                buttonText = "— (Karışık Değerler)";
+                buttonText = "— (Mixed Values)";
             }
             else if (!isAssigned)
             {
                 GUI.backgroundColor = new Color(1f, 0.88f, 0.45f);
-                buttonText = $"Seç ({typeName})";
+                buttonText = $"Select ({typeName})";
             }
             else if (isMissing)
             {
                 GUI.backgroundColor = new Color(1f, 0.45f, 0.45f);
-                buttonText = $"❌ Eksik: {currentPath}";
+                buttonText = $"❌ Missing: {currentPath}";
             }
             else if (isTypeMismatch)
             {
                 GUI.backgroundColor = new Color(1f, 0.55f, 0.3f);
-                buttonText = $"⚠️ Uyumsuz: {ownerGroup.GetFullChannelName(resolvedEntry)}";
+                buttonText = $"⚠️ Mismatch: {ownerGroup.GetFullChannelName(resolvedEntry)}";
             }
             else
             {
@@ -254,7 +253,7 @@ namespace Yasin.EventBoard.Editor
                 string badge = resolvedEntry.isSaveable ? " 💾" : string.Empty;
                 buttonText = $"{ownerGroup.GroupName} / {resolvedEntry.eventName}{badge}";
 
-                // Play Mode'da canlı Blackboard değerini göster
+                // Show live Blackboard value in Play Mode
                 if (Application.isPlaying && EventBoard.TryGetDiagnosticSlot(resolvedEntry.RuntimeId, out IEventChannelDiagnostic liveSlot) && liveSlot.HasValue)
                 {
                     buttonText += $"  [= {liveSlot.GetFormattedValue()}]";
@@ -290,8 +289,8 @@ namespace Yasin.EventBoard.Editor
 
             GUI.backgroundColor = prevBg;
 
-            // [+] Seçilen Grup SO'ya Yeni Event Ekleme Butonu
-            if (GUI.Button(addBtnRect, new GUIContent("+", $"Bir EventBoardGroup SO içine yeni '{typeName}' olayı tanımla ve buraya bağla")))
+            // [+] Quick-create event button
+            if (GUI.Button(addBtnRect, new GUIContent("+", $"Define a new '{typeName}' event in an EventBoardGroup SO and assign it here")))
             {
                 SerializedObject targetSO = property.serializedObject;
                 string propPath = property.propertyPath;

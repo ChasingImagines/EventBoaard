@@ -5,8 +5,8 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Editör tanılaması ve sahne geçişi temizliği (ClearNonPersistent / Reset) için
-    /// tip bağımsız kanal yönetim arayüzü. Oyun içi sıcak yolda (Publish/TryGet) kullanılmaz.
+    /// Type-agnostic channel management interface for Editor diagnostics and scene/reset cleanup.
+    /// Not used on the gameplay hot path (Publish/TryGet).
     /// </summary>
     public interface IEventChannelDiagnostic
     {
@@ -41,8 +41,7 @@ namespace Yasin.EventBoard
     }
 
     /// <summary>
-    /// Belirli bir <typeparamref name="T"/> tipi için sıfır çöp (Zero-GC / Zero-Boxing),
-    /// re-entrancy güvenli Blackboard durumu ve abone listesi tutan kanal hücresi.
+    /// Zero-GC, zero-boxing, re-entrancy-safe channel slot holding Blackboard state and listeners for type <typeparamref name="T"/>.
     /// </summary>
     internal sealed class EventChannelSlot<T> : IEventChannelInternal
     {
@@ -162,7 +161,7 @@ namespace Yasin.EventBoard
 
             if (_dispatchDepth >= MaxDispatchDepth)
             {
-                Debug.LogError($"[EventBoard] '{Path}' (#{RuntimeId}) kanalında sonsuz iç içe Publish döngüsü (Derinlik >= {MaxDispatchDepth}) tespit edildi ve durduruldu!");
+                Debug.LogError($"[EventBoard] Infinite nested Publish loop detected on '{Path}' (#{RuntimeId}) (Depth >= {MaxDispatchDepth}) and aborted!");
                 return;
             }
 
@@ -192,7 +191,7 @@ namespace Yasin.EventBoard
                         _activeListenerCount--;
                         _hasRemovals = true;
 #if UNITY_EDITOR
-                        Debug.LogWarning($"[EventBoard] '{Path}' (#{RuntimeId}) kanalında yok edilmiş (Destroyed) bir objeye ait unutulmuş abonelik otomatik temizlendi. Lütfen OnDisable/OnDestroy içinde Unsubscribe veya Dispose çağırın.");
+                        Debug.LogWarning($"[EventBoard] Automatically cleaned up a forgotten subscription belonging to a destroyed object on '{Path}' (#{RuntimeId}). Please call Unsubscribe or Dispose in OnDisable/OnDestroy.");
 #endif
                         continue;
                     }
@@ -472,9 +471,9 @@ namespace Yasin.EventBoard
                 return CurrentValue != null ? CurrentValue.ToString() : "null";
 
             if (EffectiveHasDefault)
-                return DefaultValue != null ? $"{DefaultValue} (Varsayılan)" : "null (Varsayılan)";
+                return DefaultValue != null ? $"{DefaultValue} (Default)" : "null (Default)";
 
-            return "— (Boş)";
+            return "— (Empty)";
         }
 
         public string GetFormattedDefaultValue()

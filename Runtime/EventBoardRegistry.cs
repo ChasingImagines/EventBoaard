@@ -5,8 +5,8 @@ using UnityEngine;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Projedeki tüm EventBoardGroup ScriptableObject varlıklarını merkezi olarak tutan
-    /// ve Unity'nin PreloadedAssets mekanizmasıyla oyun açılışında otomatik yüklenen proje kaydı.
+    /// Central project registry holding all EventBoardGroup ScriptableObject assets
+    /// and automatically loaded at startup via Unity's PreloadedAssets mechanism.
     /// </summary>
     [CreateAssetMenu(fileName = "EventBoardRegistry", menuName = "EventBoard/Registry (Project Singleton)", order = 0)]
     public sealed class EventBoardRegistry : ScriptableObject
@@ -14,10 +14,10 @@ namespace Yasin.EventBoard
         public const string DefaultRegistryAssetPath = "Assets/EventBoard/EventBoardRegistry.asset";
         public const string DefaultGroupFolderPath = "Assets/EventBoard/Groups";
 
-        [Tooltip("Hub veya Quick-Create üzerinden yeni bir Grup SO oluşturulduğunda kaydedilecek varsayılan klasör yolu.")]
+        [Tooltip("Default folder path where new Group SO assets are saved when created from the Hub or Quick-Create popup.")]
         [SerializeField] private string defaultGroupFolder = DefaultGroupFolderPath;
 
-        [Tooltip("Build ortamında otomatik yüklenecek tüm EventBoardGroup varlıkları. Editör tarafından otomatik senkronize edilir.")]
+        [Tooltip("All EventBoardGroup assets automatically loaded in Player Builds. Kept synchronized by the Editor.")]
         [SerializeField] private List<EventBoardGroup> groups = new List<EventBoardGroup>();
 
         private static EventBoardRegistry _active;

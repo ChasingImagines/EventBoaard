@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Yasin.EventBoard.Editor
 {
     /// <summary>
-    /// EventBoardRegistry için PreloadedAssets durumunu gösteren ve tek tıkla proje senkronizasyonu sağlayan Editör arayüzü.
+    /// Custom Inspector for EventBoardRegistry showing PreloadedAssets status and one-click project synchronization.
     /// </summary>
     [CustomEditor(typeof(EventBoardRegistry))]
     public sealed class EventBoardRegistryEditor : UnityEditor.Editor
@@ -23,17 +23,17 @@ namespace Yasin.EventBoard.Editor
             if (isPreloaded)
             {
                 EditorGUILayout.HelpBox(
-                    "✅ Bu EventBoardRegistry varlığı PlayerSettings > Preloaded Assets içinde kayıtlı.\n" +
-                    "Build ortamında tüm EventBoardGroup varlıkları (hangi klasörde olursa olsun) otomatik yüklenir.",
+                    "✅ This EventBoardRegistry asset is registered in PlayerSettings > Preloaded Assets.\n" +
+                    "All EventBoardGroup assets (regardless of folder) will load automatically in Player Builds.",
                     MessageType.Info);
             }
             else
             {
                 EditorGUILayout.HelpBox(
-                    "⚠️ Bu Registry henüz PlayerSettings > Preloaded Assets listesinde değil. Player Build'lerde otomatik yüklenmesi için ekleyin.",
+                    "⚠️ This Registry is not yet in PlayerSettings > Preloaded Assets. Add it so groups load automatically in Player Builds.",
                     MessageType.Warning);
 
-                if (GUILayout.Button("📌 Preloaded Assets'e Ekle", GUILayout.Height(26f)))
+                if (GUILayout.Button("📌 Add to Preloaded Assets", GUILayout.Height(26f)))
                 {
                     EventBoardRegistryUtility.EnsurePreloaded(registry);
                 }
@@ -41,7 +41,7 @@ namespace Yasin.EventBoard.Editor
 
             EditorGUILayout.Space(4f);
 
-            if (GUILayout.Button("🔍 Projedeki Tüm Grupları Senkronize Et", GUILayout.Height(30f)))
+            if (GUILayout.Button("🔍 Sync All Groups in Project", GUILayout.Height(30f)))
             {
                 EventBoardRegistryUtility.SyncAllGroups(createRegistryIfGroupsExist: true, saveAssets: true);
                 serializedObject.Update();
@@ -55,7 +55,7 @@ namespace Yasin.EventBoard.Editor
     }
 
     /// <summary>
-    /// EventBoardRegistry varlığını yöneten, PreloadedAssets kaydını koruyan ve global GUID çakışmalarını onaran yardımcı sınıf.
+    /// Manages the EventBoardRegistry asset, maintains PreloadedAssets registration, and repairs cross-group GUID collisions.
     /// </summary>
     public static class EventBoardRegistryUtility
     {
@@ -273,7 +273,7 @@ namespace Yasin.EventBoard.Editor
                 }
             }
 
-            // Global GUID çakışması onarımı (Ctrl+D ile çoğaltılmış grup SO'ları dahil)
+            // Global GUID collision repair (including assets duplicated via Ctrl+D)
             HashSet<string> globalGuids = new HashSet<string>(StringComparer.Ordinal);
             bool anyDirty = RepairDuplicateGuids(existingPass, globalGuids);
             if (RepairDuplicateGuids(newPass, globalGuids))
@@ -336,7 +336,7 @@ namespace Yasin.EventBoard.Editor
                     group.RebuildLookups();
                     EditorUtility.SetDirty(group);
                     EventBoard.HydrateFromGroup(group);
-                    Debug.Log($"[EventBoard] '{group.name}' içindeki çakışan/kopyalanmış olay GUID'leri otomatik olarak yenilendi.", group);
+                    Debug.Log($"[EventBoard] Automatically regenerated colliding/duplicated event GUIDs inside '{group.name}'.", group);
                 }
             }
             return anyModified;
@@ -364,8 +364,7 @@ namespace Yasin.EventBoard.Editor
     }
 
     /// <summary>
-    /// Projede yeni bir EventBoardGroup oluşturulduğunda, çoğaltıldığında, silindiğinde veya taşındığında
-    /// grup önbelleğini temizleyen ve EventBoardRegistry'yi gecikmeli (delayCall) olarak güncelleyen otomatik dinleyici.
+    /// Automatically invalidates caches and schedules a delayed EventBoardRegistry sync when EventBoardGroup assets are created, duplicated, deleted, or moved.
     /// </summary>
     public sealed class EventBoardAssetPostprocessor : AssetPostprocessor
     {
@@ -462,8 +461,7 @@ namespace Yasin.EventBoard.Editor
     }
 
     /// <summary>
-    /// Player Build başlamadan önce tüm EventBoardGroup varlıklarının EventBoardRegistry ve PreloadedAssets içine
-    /// senkronize edildiğini garantiye alan derleme öncesi doğrulayıcı.
+    /// Ensures all EventBoardGroup assets are synced into EventBoardRegistry and PreloadedAssets before every Player Build.
     /// </summary>
     public sealed class EventBoardBuildPreprocessor : IPreprocessBuildWithReport
     {
@@ -479,7 +477,7 @@ namespace Yasin.EventBoard.Editor
                 EventBoardRegistry registry = EventBoardRegistryUtility.FindRegistry();
                 if (registry == null || !EventBoardRegistryUtility.IsInPreloadedAssets(registry))
                 {
-                    throw new BuildFailedException("[EventBoard] EventBoardRegistry varlığı PreloadedAssets içine kaydedilemedi.");
+                    throw new BuildFailedException("[EventBoard] Failed to register EventBoardRegistry in PlayerSettings > Preloaded Assets.");
                 }
             }
         }

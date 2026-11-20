@@ -3,8 +3,8 @@ using System;
 namespace Yasin.EventBoard
 {
     /// <summary>
-    /// Parametresiz (veri taşımayan) olaylar ve tetikleyiciler için sıfır bellek (Zero-GC) birim tipi.
-    /// Örnek kullanım: [SerializeField] private EventKey&lt;VoidSignal&gt; onGameSaved;
+    /// Zero-GC unit type for parameterless (data-free) events and triggers.
+    /// Example: [SerializeField] private EventKey&lt;VoidSignal&gt; onGameSaved;
     /// </summary>
     [Serializable]
     public readonly struct VoidSignal : IEquatable<VoidSignal>
@@ -20,7 +20,7 @@ namespace Yasin.EventBoard
     public static class VoidSignalExtensions
     {
         /// <summary>
-        /// Parametresiz VoidSignal kanalını argüman vermeden tetikler.
+        /// Fires a parameterless VoidSignal channel without needing to pass an argument.
         /// </summary>
         public static void Publish(this EventKey<VoidSignal> key)
         {
@@ -36,4 +36,3 @@ namespace Yasin.EventBoard
         }
     }
 }
-
